@@ -5,6 +5,8 @@ import { AppError } from './error';
 export interface AuthUser {
   id: string;
   email: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
 }
 
 declare global {
@@ -41,6 +43,8 @@ export const requireAuth: RequestHandler = async (req, _res, next) => {
     req.user = {
       id: data.user.id,
       email: data.user.email ?? '',
+      emailVerified: Boolean(data.user.email_confirmed_at),
+      phoneVerified: Boolean(data.user.phone_confirmed_at),
     };
 
     next();

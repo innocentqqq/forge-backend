@@ -10,6 +10,6 @@ profileRouter.get('/', profileController.getProfile);
 profileRouter.patch('/', profileController.updateProfile);
 profileRouter.get('/stats', profileController.getProfileStats);
 
-profileRouter.get('/saved-printers', profileController.listSavedPrinters);
-profileRouter.post('/saved-printers', profileController.createSavedPrinter);
-profileRouter.delete('/saved-printers/:id', profileController.deleteSavedPrinter);
+profileRouter.get('/saved-providers', profileController.listSavedProviders);
+profileRouter.post('/saved-providers', profileController.saveProvider);
+profileRouter.delete('/saved-providers/:id', profileController.deleteSavedProvider);

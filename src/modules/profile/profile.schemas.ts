@@ -54,19 +54,13 @@ export const updateProfileSchema = z
     }
   });
 
-export const createSavedPrinterSchema = z
+export const saveProviderSchema = z
   .object({
-    name: z.string().trim().min(1).max(120),
-    manufacturer: z.string().trim().min(1).max(120).nullish(),
-    model: z.string().trim().min(1).max(120).nullish(),
-    material: materialSchema.default('PLA'),
-    quality: qualitySchema.default('STANDARD'),
-    notes: z.string().trim().max(2000).nullish(),
-    isDefault: z.boolean().optional(),
+    providerId: z.string().uuid('Provider id must be a valid UUID'),
   })
   .strict();
 
-export const savedPrinterIdSchema = z.string().uuid('Saved printer id must be a valid UUID');
+export const savedProviderIdSchema = z.string().uuid('Provider id must be a valid UUID');
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
-export type CreateSavedPrinterInput = z.infer<typeof createSavedPrinterSchema>;
+export type SaveProviderInput = z.infer<typeof saveProviderSchema>;

@@ -1,3 +1,5 @@
+import type { ProviderIdentity, PublicProvider, SavedProvider } from '../providers/providers.types';
+
 export const MATERIALS = ['PLA', 'ABS', 'PETG', 'TPU'] as const;
 export const QUALITIES = ['DRAFT', 'STANDARD', 'HIGH'] as const;
 
@@ -40,44 +42,24 @@ export interface Profile {
   phone: string | null;
   notifications: NotificationSettings;
   preferences: PreferenceSettings;
+  provider: ProviderIdentity | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface SavedPrinterRow {
+export interface SavedProviderRow {
   id: string;
-  user_id: string;
-  name: string;
-  manufacturer: string | null;
-  model: string | null;
-  material: Material;
-  quality: Quality;
-  notes: string | null;
-  is_default: boolean;
+  provider_id: string;
   created_at: string;
-  updated_at: string;
-}
-
-export interface SavedPrinter {
-  id: string;
-  name: string;
-  manufacturer: string | null;
-  model: string | null;
-  material: Material;
-  quality: Quality;
-  notes: string | null;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface ProfileStats {
   printsCompleted: number;
   totalOrders: number;
-  savedPrinters: number;
+  savedProviders: number;
 }
 
-export function toProfile(row: ProfileRow): Profile {
+export function toProfile(row: ProfileRow, provider: ProviderIdentity | null = null): Profile {
   return {
     id: row.id,
     email: row.email,
@@ -94,22 +76,17 @@ export function toProfile(row: ProfileRow): Profile {
       material: row.preferred_material,
       quality: row.preferred_quality,
     },
+    provider,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-export function toSavedPrinter(row: SavedPrinterRow): SavedPrinter {
+export function toSavedProvider(row: SavedProviderRow, provider: PublicProvider): SavedProvider {
   return {
     id: row.id,
-    name: row.name,
-    manufacturer: row.manufacturer,
-    model: row.model,
-    material: row.material,
-    quality: row.quality,
-    notes: row.notes,
-    isDefault: row.is_default,
+    providerId: row.provider_id,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    provider,
   };
 }

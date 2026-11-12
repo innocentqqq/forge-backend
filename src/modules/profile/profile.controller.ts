@@ -1,10 +1,6 @@
 import { getAuthUser } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/error';
-import {
-  createSavedPrinterSchema,
-  savedPrinterIdSchema,
-  updateProfileSchema,
-} from './profile.schemas';
+import { saveProviderSchema, savedProviderIdSchema, updateProfileSchema } from './profile.schemas';
 import * as profileService from './profile.service';
 
 export const getProfile = asyncHandler(async (req, res) => {
@@ -26,22 +22,22 @@ export const getProfileStats = asyncHandler(async (req, res) => {
   res.status(200).json(stats);
 });
 
-export const listSavedPrinters = asyncHandler(async (req, res) => {
+export const listSavedProviders = asyncHandler(async (req, res) => {
   const user = getAuthUser(req);
-  const printers = await profileService.listSavedPrinters(user.id);
-  res.status(200).json(printers);
+  const providers = await profileService.listSavedProviders(user.id);
+  res.status(200).json(providers);
 });
 
-export const createSavedPrinter = asyncHandler(async (req, res) => {
+export const saveProvider = asyncHandler(async (req, res) => {
   const user = getAuthUser(req);
-  const input = createSavedPrinterSchema.parse(req.body);
-  const printer = await profileService.createSavedPrinter(user.id, input);
-  res.status(201).json(printer);
+  const input = saveProviderSchema.parse(req.body);
+  const saved = await profileService.saveProvider(user.id, input);
+  res.status(201).json(saved);
 });
 
-export const deleteSavedPrinter = asyncHandler(async (req, res) => {
+export const deleteSavedProvider = asyncHandler(async (req, res) => {
   const user = getAuthUser(req);
-  const printerId = savedPrinterIdSchema.parse(req.params.id);
-  await profileService.deleteSavedPrinter(user.id, printerId);
+  const providerId = savedProviderIdSchema.parse(req.params.id);
+  await profileService.deleteSavedProvider(user.id, providerId);
   res.status(200).json({ success: true });
 });
