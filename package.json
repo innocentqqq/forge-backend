@@ -5,7 +5,7 @@
   "description": "Forge 3D printing platform REST API",
   "main": "dist/server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
