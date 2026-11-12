@@ -4,7 +4,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy-key';
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy-key';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function sleep(ms: number) {
@@ -24,7 +25,8 @@ export async function runDemo() {
 
   // Create a dummy model_id or fetch one
   const { data: models } = await supabase.from('model_files').select('*').limit(1);
-  const modelId = models && models.length > 0 ? models[0].id : '00000000-0000-0000-0000-000000000000';
+  const modelId =
+    models && models.length > 0 ? models[0].id : '00000000-0000-0000-0000-000000000000';
 
   const orderNumber = 'DEMO' + Math.floor(100 + Math.random() * 900);
   const { data: order, error: oError } = await supabase
@@ -37,9 +39,9 @@ export async function runDemo() {
       quality: 'STANDARD',
       infill: 20,
       quantity: 1,
-      price_snapshot: 150.00,
+      price_snapshot: 150.0,
       status: 'CONFIRMED',
-      progress: 10
+      progress: 10,
     })
     .select()
     .single();
@@ -54,19 +56,19 @@ export async function runDemo() {
   const statuses = [
     { status: 'IN_QUEUE', notes: 'Order placed in print queue.' },
     { status: 'PRINTING', notes: 'Print job started on printer.' },
-    { status: 'READY_FOR_PICKUP', notes: 'Print completed successfully. Ready for pickup!' }
+    { status: 'READY_FOR_PICKUP', notes: 'Print completed successfully. Ready for pickup!' },
   ];
 
   for (const step of statuses) {
     await sleep(4000); // Wait 4 seconds between transitions
     console.log(`Advancing order ${order.order_number} to ${step.status}...`);
-    
+
     const { error: updateError } = await supabase
       .from('orders')
       .update({
         status: step.status,
         progress: step.status === 'IN_QUEUE' ? 30 : step.status === 'PRINTING' ? 75 : 100,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('id', order.id);
 
@@ -76,7 +78,7 @@ export async function runDemo() {
       await supabase.from('order_status_events').insert({
         order_id: order.id,
         status: step.status,
-        notes: step.notes
+        notes: step.notes,
       });
       console.log(`Order ${order.order_number} is now ${step.status}`);
     }

@@ -14,13 +14,16 @@ interface ModuleExports {
 }
 
 const MODULES_DIR = path.join(__dirname, '..', 'modules');
+const MODULE_ENTRY_EXTENSIONS = ['.ts', '.js', '.mjs', '.cjs'];
 
-function isModuleNotFoundFor(error: unknown, entry: string): boolean {
-  if (!(error instanceof Error)) {
-    return false;
+function resolveModuleEntry(moduleDir: string): string | null {
+  for (const extension of MODULE_ENTRY_EXTENSIONS) {
+    const candidate = path.join(moduleDir, `index${extension}`);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
   }
-  const code = (error as NodeJS.ErrnoException).code;
-  return code === 'MODULE_NOT_FOUND' && error.message.includes(entry);
+  return null;
 }
 
 export function loadModuleRouters(): RegisteredModule[] {
@@ -37,18 +40,12 @@ export function loadModuleRouters(): RegisteredModule[] {
   const modules: RegisteredModule[] = [];
 
   for (const name of moduleNames) {
-    const entry = path.join(MODULES_DIR, name, 'index');
-    let loaded: ModuleExports;
-
-    try {
-      loaded = require(entry) as ModuleExports;
-    } catch (error) {
-      if (isModuleNotFoundFor(error, entry)) {
-        continue;
-      }
-      throw error;
+    const entry = resolveModuleEntry(path.join(MODULES_DIR, name));
+    if (!entry) {
+      continue;
     }
 
+    const loaded = require(entry) as ModuleExports;
     const router = loaded.router ?? loaded.default;
     if (!router) {
       throw new Error(`Module "${name}" must export an Express router as "router" or default`);
