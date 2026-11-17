@@ -2,6 +2,10 @@ jest.mock('../src/config/supabase', () => ({
   supabaseAdmin: {
     auth: {
       getUser: jest.fn(),
+      admin: {
+        getUserById: jest.fn(),
+        deleteUser: jest.fn(),
+      },
     },
   },
 }));
@@ -69,6 +73,8 @@ const savedProvider: SavedProvider = {
 };
 
 const getUserMock = supabaseAdmin.auth.getUser as jest.Mock;
+const getUserByIdMock = supabaseAdmin.auth.admin.getUserById as jest.Mock;
+const deleteUserMock = supabaseAdmin.auth.admin.deleteUser as jest.Mock;
 const authUser = {
   id: 'user-1',
   email: 'maker@example.com',
@@ -254,5 +260,111 @@ describe('saved provider routes', () => {
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
     expect(profileService.deleteSavedProvider).not.toHaveBeenCalled();
+  });
+});
+
+describe('social sign-in check', () => {
+  function oauthAccount({
+    provider,
+    createdAt,
+    lastSignInAt,
+    identities,
+  }: {
+    provider: string;
+    createdAt: string;
+    lastSignInAt: string;
+    identities?: { provider: string }[];
+  }) {
+    getUserByIdMock.mockResolvedValue({
+      data: {
+        user: {
+          id: 'user-1',
+          app_metadata: { provider },
+          identities: identities ?? [{ provider }],
+          created_at: createdAt,
+          last_sign_in_at: lastSignInAt,
+        },
+      },
+      error: null,
+    });
+  }
+
+  it('deletes an account created by the same OAuth sign-in', async () => {
+    authenticate();
+    const now = Date.now();
+    oauthAccount({
+      provider: 'google',
+      createdAt: new Date(now).toISOString(),
+      lastSignInAt: new Date(now + 500).toISOString(),
+    });
+    deleteUserMock.mockResolvedValue({ data: {}, error: null });
+
+    const response = await request(app)
+      .post('/api/v1/auth/oauth-signin-check')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ deleted: true });
+    expect(deleteUserMock).toHaveBeenCalledWith('user-1');
+  });
+
+  it('keeps an existing OAuth account', async () => {
+    authenticate();
+    oauthAccount({
+      provider: 'google',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSignInAt: '2026-06-01T00:00:00.000Z',
+    });
+
+    const response = await request(app)
+      .post('/api/v1/auth/oauth-signin-check')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ deleted: false });
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  it('never deletes an email/password account', async () => {
+    authenticate();
+    oauthAccount({
+      provider: 'email',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      lastSignInAt: '2026-06-01T00:00:00.000Z',
+    });
+
+    const response = await request(app)
+      .post('/api/v1/auth/oauth-signin-check')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ deleted: false });
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps an account linked to more than one identity', async () => {
+    authenticate();
+    oauthAccount({
+      provider: 'google',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      lastSignInAt: '2026-06-01T00:00:00.000Z',
+      identities: [{ provider: 'google' }, { provider: 'email' }],
+    });
+
+    const response = await request(app)
+      .post('/api/v1/auth/oauth-signin-check')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ deleted: false });
+    expect(deleteUserMock).not.toHaveBeenCalled();
+  });
+
+  it('requires authentication', async () => {
+    const response = await request(app).post('/api/v1/auth/oauth-signin-check');
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe('UNAUTHORIZED');
+    expect(deleteUserMock).not.toHaveBeenCalled();
   });
 });
