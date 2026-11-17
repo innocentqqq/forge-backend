@@ -16,6 +16,8 @@
 // Enumerations (mirror the database enums and the API's zod schemas)
 // ---------------------------------------------------------------------------
 
+export type ModelFormat = 'stl' | 'obj' | '3mf';
+
 export type Material = 'PLA' | 'ABS' | 'PETG' | 'TPU';
 
 export type Quality = 'DRAFT' | 'STANDARD' | 'HIGH';
@@ -47,6 +49,22 @@ export type DayOfWeek =
 // ---------------------------------------------------------------------------
 // Shared value objects
 // ---------------------------------------------------------------------------
+
+export interface BoundingBox { x: number; y: number; z: number } // millimetres
+
+export interface ModelMetadata {
+  id: string;
+  fileName: string;
+  format: ModelFormat;
+  sizeBytes: number;
+  storagePath: string;
+  triangleCount: number;
+  boundingBox: BoundingBox;   // mm
+  volumeCm3: number;
+  units: 'mm';                // STL has no units; assumed mm
+  isWatertight: boolean;
+  createdAt: string;          // ISO date
+}
 
 export interface PickupHourRange {
   open: string;
@@ -109,6 +127,7 @@ export interface Order {
   order_number: string;
   user_id: string | null;
   model_id: string;
+  modelId: string;
   printer_id: string;
   material: Material;
   quality: Quality;
