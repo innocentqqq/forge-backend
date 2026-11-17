@@ -75,7 +75,7 @@ The two screens behave differently on purpose:
 4. **Configure where Supabase can redirect back to the app**
    - Hosted: **Authentication -> URL Configuration** -> set **Site URL** and add **Redirect URLs**:
      - Web dev: `http://localhost:8081/**`
-     - Expo Go: `exp://**/--/auth/callback` and `exp://**/--/auth/reset-password`
+     - Expo Go: `exp://**/--/auth/callback` and `exp://**/--/auth/reset-password`; Expo tunnel: `exps://**/--/auth/callback` and `exps://**/--/auth/reset-password`
      - Standalone app: `forge://auth/callback` and `forge://auth/reset-password`
      - Production web: `https://your-domain.com/**`
    - Local: `forge-backend/supabase/config.toml` is already set to `http://localhost:8081`
@@ -120,7 +120,7 @@ npx expo start --tunnel
 ```
 
 The first run installs `@expo/ngrok`. The tunnel URL is random, so add
-`exp://**/--/auth/callback` to the Supabase Redirect URLs if you want Google sign-in to
+`exp://**/--/auth/callback` and the matching `exps://**/--/auth/callback` tunnel URL to the Supabase Redirect URLs if you want Google sign-in to
 work from Expo Go in tunnel mode too.
 
 ## EAS

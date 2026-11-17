@@ -124,7 +124,7 @@ npx expo start --tunnel    # from apps/mobile, or: npm run dev -- --tunnel
 ```
 
 The tunnel URL is random on each start; always use the fresh QR code. Add
-`exp://**/--/auth/callback` to the Supabase redirect URLs so Google sign-in works from
+`exp://**/--/auth/callback` (and `exps://**/--/auth/callback` for Expo tunnels) to the Supabase redirect URLs so Google sign-in works from
 Expo Go over a tunnel.
 
 **`npm install` complains about peer dependencies.** This repo pins React Native, React,
