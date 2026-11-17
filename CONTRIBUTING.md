@@ -52,7 +52,7 @@ Commit messages follow `type: summary` — the same types as the branch prefixes
 
 ```
 feat: add printer availability toggle
-fix: keep the session after a Google sign-in
+fix: preserve the session after app restart
 docs: explain the local Supabase setup
 ```
 

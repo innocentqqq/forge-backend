@@ -14,7 +14,7 @@ Expo (React Native + TypeScript + Expo Router) client for the `forge-backend` AP
 ## 1. Configure
 
 ```bash
-cd ~/Projects/forge-app
+cd ~/Projects/forge-backend/apps/mobile
 cp .env.example .env   # already created; edit it
 ```
 
@@ -29,63 +29,34 @@ Fill in:
 > Never put the `service_role` or `sb_secret_...` key in this app. Mobile bundles are
 > readable by anyone. Use the publishable/anon key only.
 
-### Social sign-in (Google)
+### Google sign-in
 
-The sign-in and sign-up screens include a **Continue with Google** button. It calls
-`supabase.auth.signInWithOAuth` and returns to `/auth/callback`, which exchanges the
-PKCE code for a session.
+The sign-in and sign-up screens use Supabase Google sign-in with PKCE. Native builds open
+Google in the system authentication browser and return to `/auth/callback`; Expo Router
+then completes the session exchange. Web returns to the same callback route.
 
-The two screens behave differently on purpose:
+#### Supabase + Google setup
 
-- **Sign in** only admits accounts that already exist. Supabase creates a user during
-  the OAuth exchange before the app can inspect it, so the app calls
-  `POST /auth/oauth-signin-check`. The API deletes the account when this exact Google
-  sign-in created it; the app then signs the device out and asks the user to sign up.
-- **Sign up** creates the account and shows the `/auth/success` screen.
-- Google already verifies the email address, so Supabase does not send a separate
-  confirmation email for Google sign-ups. Email/password sign-ups still receive the
-  normal Supabase confirmation email and land on `/auth/success` after confirming.
+1. In Google Cloud, create a **Web application** OAuth client. Add the Supabase callback
+   shown on **Authentication → Sign-In/Providers → Google** as an Authorized redirect URI.
+   For this project it is `https://mdwwsdvepngytbbbmtgv.supabase.co/auth/v1/callback`.
+   Add `http://localhost:8081` as an Authorized JavaScript origin for Expo web development.
+2. In Supabase, enable Google in **Authentication → Sign-In/Providers → Google** and paste
+   the new client ID and secret. Keep the secret in Supabase; it does not belong in the app.
+3. In **Authentication → URL Configuration**, use `http://localhost:8081` as the Site URL
+   for local web development, and allow these app redirects:
+   - `http://localhost:8081/**`
+   - `exp://**/--/auth/callback` and `exp://**/--/auth/reset-password`
+   - `exps://**/--/auth/callback` and `exps://**/--/auth/reset-password`
+   - `forge://auth/callback` and `forge://auth/reset-password`
+4. Keep Supabase OAuth Server disabled for this flow. It is a separate feature for apps
+   that use Forge as an OAuth provider; Google sign-in uses Supabase's Google provider.
 
-#### Supabase + Google OAuth setup (step by step)
+The sign-in screen keeps the existing-account rule: if Google OAuth creates a new user
+while signing in, the API removes that new account and asks the user to sign up instead.
+The sign-up screen accepts the new account. The app calls the deployed
+`POST /auth/oauth-signin-check` endpoint through the `forge-api` Edge Function.
 
-1. **Google Cloud project & consent screen**
-   - Open [Google Cloud Console](https://console.cloud.google.com/) and select/create a project.
-   - Go to **APIs & Services -> OAuth consent screen**. Choose **External** (or **Internal** for Workspace-only users).
-   - Fill app name/support email/developer contact. Keep default scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`.
-   - While in Testing, add your Google accounts as **Test users** (or publish the app).
-2. **Create OAuth client credentials**
-   - Go to **APIs & Services -> Credentials -> Create Credentials -> OAuth client ID**.
-   - Application type: **Web application** (Supabase performs the provider callback).
-   - Under **Authorized redirect URIs**, add the Supabase callback URL from your Supabase provider page:
-     - Hosted: `https://<project-ref>.supabase.co/auth/v1/callback`
-     - Local CLI (if used): `http://127.0.0.1:54321/auth/v1/callback`
-   - Save and copy the **Client ID** and **Client secret**.
-3. **Enable Google in Supabase**
-   - Hosted: **Authentication -> Providers -> Google** -> Enable, paste Client ID/secret, Save.
-   - Local CLI: `forge-backend/supabase/config.toml` already contains:
-     ```toml
-     [auth.external.google]
-     enabled = true
-     client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
-     secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
-     skip_nonce_check = true
-     ```
-     Put those two values in `forge-backend/.env` (gitignored), then restart local
-     Supabase: `npx supabase stop && npx supabase start`.
-4. **Configure where Supabase can redirect back to the app**
-   - Hosted: **Authentication -> URL Configuration** -> set **Site URL** and add **Redirect URLs**:
-     - Web dev: `http://localhost:8081/**`
-     - Expo Go: `exp://**/--/auth/callback` and `exp://**/--/auth/reset-password`; Expo tunnel: `exps://**/--/auth/callback` and `exps://**/--/auth/reset-password`
-     - Standalone app: `forge://auth/callback` and `forge://auth/reset-password`
-     - Production web: `https://your-domain.com/**`
-   - Local: `forge-backend/supabase/config.toml` is already set to `http://localhost:8081`
-     plus the Expo Go and `forge://` callbacks (see `[auth]`).
-5. **App and API environment**
-   - App `.env`: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` for the same project.
-   - If `EXPO_PUBLIC_API_URL` is set, it must point to a running forge-backend with `POST /auth/oauth-signin-check` deployed (this endpoint enforces "sign in requires existing account").
-6. **Deploy/verify backend**
-   - Deploy the API (section 2) so `/auth/oauth-signin-check` exists.
-   - Test: Sign up with Google -> should create/land in app; sign out and try Sign in with a never-seen Google account -> should be rejected with "sign up first".
 
 ## 2. Deploy the Supabase API
 
@@ -104,8 +75,8 @@ The deployed function URL is `https://<project-ref>.supabase.co/functions/v1/for
 ## 3. Run the app
 
 ```bash
-cd ~/Projects/forge-app
-npm start            # or: npx expo start
+cd ~/Projects/forge-backend/apps/mobile
+npx expo start
 ```
 
 Then press `a` (Android emulator), `i` (iOS simulator), `w` (web), or scan the QR code
@@ -119,9 +90,7 @@ If Expo Go hangs or times out on the LAN, the network is probably isolating clie
 npx expo start --tunnel
 ```
 
-The first run installs `@expo/ngrok`. The tunnel URL is random, so add
-`exp://**/--/auth/callback` and the matching `exps://**/--/auth/callback` tunnel URL to the Supabase Redirect URLs if you want Google sign-in to
-work from Expo Go in tunnel mode too.
+The first run installs `@expo/ngrok`. Use a fresh QR code after restarting the tunnel.
 
 ## EAS
 
