@@ -289,24 +289,27 @@ describe('social sign-in check', () => {
     });
   }
 
-  it('deletes an account created by the same OAuth sign-in', async () => {
-    authenticate();
-    const now = Date.now();
-    oauthAccount({
-      provider: 'google',
-      createdAt: new Date(now).toISOString(),
-      lastSignInAt: new Date(now + 500).toISOString(),
-    });
-    deleteUserMock.mockResolvedValue({ data: {}, error: null });
+  it.each(['google', 'github'])(
+    'deletes an account created by the same %s sign-in',
+    async (provider) => {
+      authenticate();
+      const now = Date.now();
+      oauthAccount({
+        provider,
+        createdAt: new Date(now).toISOString(),
+        lastSignInAt: new Date(now + 500).toISOString(),
+      });
+      deleteUserMock.mockResolvedValue({ data: {}, error: null });
 
-    const response = await request(app)
-      .post('/api/v1/auth/oauth-signin-check')
-      .set('Authorization', 'Bearer valid-token');
+      const response = await request(app)
+        .post('/api/v1/auth/oauth-signin-check')
+        .set('Authorization', 'Bearer valid-token');
 
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ deleted: true });
-    expect(deleteUserMock).toHaveBeenCalledWith('user-1');
-  });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ deleted: true });
+      expect(deleteUserMock).toHaveBeenCalledWith('user-1');
+    },
+  );
 
   it('keeps an existing OAuth account', async () => {
     authenticate();

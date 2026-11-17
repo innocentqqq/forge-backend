@@ -1,4 +1,27 @@
-export const PROVIDER_TYPES = ['LAB', 'INDIVIDUAL'] as const;
+import type {
+  DayOfWeek,
+  PickupHours,
+  Provider,
+  ProviderAvailability,
+  ProviderType,
+  PublicProvider,
+} from '@forge/types';
+
+export type {
+  DayOfWeek,
+  PickupHourRange,
+  PickupHours,
+  Provider,
+  ProviderAvailability,
+  ProviderIdentity,
+  ProviderType,
+  ProviderVerification,
+  PublicProvider,
+  SavedProvider,
+} from '@forge/types';
+
+// Runtime value lists. `@forge/types` is types-only and zod enums need real literals.
+export const PROVIDER_TYPES = ['LAB', 'INDIVIDUAL'] as const satisfies readonly ProviderType[];
 export const DAYS_OF_WEEK = [
   'monday',
   'tuesday',
@@ -7,17 +30,14 @@ export const DAYS_OF_WEEK = [
   'friday',
   'saturday',
   'sunday',
-] as const;
+] as const satisfies readonly DayOfWeek[];
 
-export type ProviderType = (typeof PROVIDER_TYPES)[number];
-export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
-
-export interface PickupHourRange {
-  open: string;
-  close: string;
-}
-
-export type PickupHours = Partial<Record<DayOfWeek, PickupHourRange | null>>;
+// Compile-time guard: adding a provider type to the shared union without updating the
+// list above fails the typecheck instead of silently rejecting a valid value at runtime.
+type Exact<T extends boolean> = T;
+export type ProviderTypesAreExhaustive = Exact<
+  [Exclude<ProviderType, (typeof PROVIDER_TYPES)[number]>] extends [never] ? true : false
+>;
 
 export interface ProviderRow {
   id: string;
@@ -54,57 +74,6 @@ export type PublicProviderRow = Pick<
   | 'phone_verified_at'
   | 'created_at'
 >;
-
-export interface ProviderIdentity {
-  id: string;
-  type: ProviderType;
-}
-
-export interface ProviderAvailability {
-  isOpen: boolean;
-  maxQueueSize: number;
-  pickupHours: PickupHours;
-}
-
-export interface ProviderVerification {
-  isVerified: boolean;
-  verifiedByAdmin: boolean;
-  emailVerifiedAt: string | null;
-  phoneVerifiedAt: string | null;
-}
-
-export interface Provider {
-  id: string;
-  type: ProviderType;
-  displayName: string;
-  bio: string | null;
-  pickupArea: string;
-  pickupAddress: string;
-  latitude: number | null;
-  longitude: number | null;
-  availability: ProviderAvailability;
-  verification: ProviderVerification;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PublicProvider {
-  id: string;
-  type: ProviderType;
-  displayName: string;
-  bio: string | null;
-  pickupArea: string;
-  isVerified: boolean;
-  availability: ProviderAvailability;
-  createdAt: string;
-}
-
-export interface SavedProvider {
-  id: string;
-  providerId: string;
-  createdAt: string;
-  provider: PublicProvider;
-}
 
 export function isVerified(row: PublicProviderRow): boolean {
   if (row.type === 'LAB') {

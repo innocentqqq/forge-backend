@@ -1,10 +1,28 @@
+import type { Material, Profile, Quality } from '@forge/types';
 import type { ProviderIdentity, PublicProvider, SavedProvider } from '../providers/providers.types';
 
-export const MATERIALS = ['PLA', 'ABS', 'PETG', 'TPU'] as const;
-export const QUALITIES = ['DRAFT', 'STANDARD', 'HIGH'] as const;
+export type {
+  Material,
+  NotificationSettings,
+  Preferences,
+  Profile,
+  ProfileStats,
+  Quality,
+} from '@forge/types';
 
-export type Material = (typeof MATERIALS)[number];
-export type Quality = (typeof QUALITIES)[number];
+// Runtime value lists. `@forge/types` is types-only and zod enums need real literals.
+export const MATERIALS = ['PLA', 'ABS', 'PETG', 'TPU'] as const satisfies readonly Material[];
+export const QUALITIES = ['DRAFT', 'STANDARD', 'HIGH'] as const satisfies readonly Quality[];
+
+// Compile-time guards: adding a member to the shared union without updating the lists
+// above fails the typecheck instead of silently rejecting a valid value at runtime.
+type Exact<T extends boolean> = T;
+export type MaterialsAreExhaustive = Exact<
+  [Exclude<Material, (typeof MATERIALS)[number]>] extends [never] ? true : false
+>;
+export type QualitiesAreExhaustive = Exact<
+  [Exclude<Quality, (typeof QUALITIES)[number]>] extends [never] ? true : false
+>;
 
 export interface ProfileRow {
   id: string;
@@ -22,41 +40,10 @@ export interface ProfileRow {
   updated_at: string;
 }
 
-export interface NotificationSettings {
-  email: boolean;
-  push: boolean;
-  orderUpdates: boolean;
-  promotions: boolean;
-}
-
-export interface PreferenceSettings {
-  material: Material;
-  quality: Quality;
-}
-
-export interface Profile {
-  id: string;
-  email: string;
-  fullName: string | null;
-  avatarUrl: string | null;
-  phone: string | null;
-  notifications: NotificationSettings;
-  preferences: PreferenceSettings;
-  provider: ProviderIdentity | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface SavedProviderRow {
   id: string;
   provider_id: string;
   created_at: string;
-}
-
-export interface ProfileStats {
-  printsCompleted: number;
-  totalOrders: number;
-  savedProviders: number;
 }
 
 export function toProfile(row: ProfileRow, provider: ProviderIdentity | null = null): Profile {

@@ -18,9 +18,14 @@ function RootNavigator() {
       return;
     }
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const isPublicAuthRoute = segments[0] === 'auth' &&
-      (segments[1] === 'callback' || segments[1] === 'reset-password' || segments[1] === 'success');
+    // `useSegments()` narrows to a generated tuple once `.expo/types` exists (it is
+    // written by `expo start`). Treat it as a plain string[] so this guard typechecks
+    // in CI too, where the route types have not been generated yet.
+    const path: string[] = segments;
+    const inAuthGroup = path[0] === '(auth)';
+    const isPublicAuthRoute =
+      path[0] === 'auth' &&
+      (path[1] === 'callback' || path[1] === 'reset-password' || path[1] === 'success');
 
     if (!session && !inAuthGroup && !isPublicAuthRoute) {
       router.replace('/sign-in');

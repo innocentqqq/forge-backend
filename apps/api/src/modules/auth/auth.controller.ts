@@ -17,7 +17,7 @@ export const checkOAuthSignIn = asyncHandler(async (req, res) => {
 
   const account = data.user;
   const provider = account.app_metadata?.provider;
-  const isOAuth = provider === 'google';
+  const isOAuth = provider === 'google' || provider === 'github';
   const identities = account.identities ?? [];
   const onlyOAuthIdentity = identities.length === 1 && identities[0]?.provider === provider;
   const created = Date.parse(account.created_at);

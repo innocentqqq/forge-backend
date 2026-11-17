@@ -90,20 +90,26 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): num
   const dLat = rad(lat2 - lat1);
   const dLon = rad(lon2 - lon1);
   const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+    Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function estimatePrice(material: string, quality: string, quantity: number, priceFactor: number) {
   const rate: Record<string, number> = { PLA: 0.05, ABS: 0.07, PETG: 0.08, TPU: 0.12 };
   const multiplier: Record<string, number> = { DRAFT: 1, STANDARD: 1.3, HIGH: 1.7 };
-  return (5 + 20 * (rate[material] ?? rate.PLA) * (multiplier[quality] ?? multiplier.STANDARD)) *
-    priceFactor * Math.max(1, quantity);
+  return (
+    (5 + 20 * (rate[material] ?? rate.PLA) * (multiplier[quality] ?? multiplier.STANDARD)) *
+    priceFactor *
+    Math.max(1, quantity)
+  );
 }
 
 async function providerIdentity(userId: string) {
-  const { data, error } = await db.from('providers').select('id, type').eq('user_id', userId).maybeSingle();
+  const { data, error } = await db
+    .from('providers')
+    .select('id, type')
+    .eq('user_id', userId)
+    .maybeSingle();
   if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
   return data;
 }
@@ -115,9 +121,10 @@ function toPublicProvider(row: JsonObject) {
     displayName: row.display_name,
     bio: row.bio,
     pickupArea: row.pickup_area,
-    isVerified: row.type === 'LAB'
-      ? Boolean(row.is_verified)
-      : Boolean(row.email_verified_at && row.phone_verified_at),
+    isVerified:
+      row.type === 'LAB'
+        ? Boolean(row.is_verified)
+        : Boolean(row.email_verified_at && row.phone_verified_at),
     availability: {
       isOpen: row.is_open,
       maxQueueSize: row.max_queue_size,
@@ -143,9 +150,10 @@ function toProvider(row: JsonObject) {
       pickupHours: row.pickup_hours ?? {},
     },
     verification: {
-      isVerified: row.type === 'LAB'
-        ? Boolean(row.is_verified)
-        : Boolean(row.email_verified_at && row.phone_verified_at),
+      isVerified:
+        row.type === 'LAB'
+          ? Boolean(row.is_verified)
+          : Boolean(row.email_verified_at && row.phone_verified_at),
       verifiedByAdmin: row.is_verified,
       emailVerifiedAt: row.email_verified_at,
       phoneVerifiedAt: row.phone_verified_at,
@@ -236,8 +244,11 @@ async function route(request: Request): Promise<Response> {
     const onlyOAuthIdentity = identities.length === 1 && identities[0]?.provider === provider;
     const created = Date.parse(account.created_at);
     const last = account.last_sign_in_at ? Date.parse(account.last_sign_in_at) : created;
-    const fresh = Number.isFinite(created) && Number.isFinite(last) &&
-      last >= created && last - created < 10_000;
+    const fresh =
+      Number.isFinite(created) &&
+      Number.isFinite(last) &&
+      last >= created &&
+      last - created < 10_000;
 
     if (!isOAuth || !onlyOAuthIdentity || !fresh) {
       return json({ deleted: false });
@@ -257,14 +268,18 @@ async function route(request: Request): Promise<Response> {
     const lng = lngParam === null ? null : Number(lngParam);
     const printers = (data ?? []).map((printer) => ({
       ...printer,
-      distance_km: lat !== null && lng !== null
-        ? distanceKm(lat, lng, Number(printer.lat), Number(printer.lng))
-        : null,
+      distance_km:
+        lat !== null && lng !== null
+          ? distanceKm(lat, lng, Number(printer.lat), Number(printer.lng))
+          : null,
     }));
     const sort = url.searchParams.get('sort');
-    if (sort === 'cheapest') printers.sort((a, b) => Number(a.price_factor) - Number(b.price_factor));
+    if (sort === 'cheapest')
+      printers.sort((a, b) => Number(a.price_factor) - Number(b.price_factor));
     else if (sort === 'fastest') {
-      printers.sort((a, b) => Number(a.est_completion_hours_per_unit) - Number(b.est_completion_hours_per_unit));
+      printers.sort(
+        (a, b) => Number(a.est_completion_hours_per_unit) - Number(b.est_completion_hours_per_unit),
+      );
     } else if (lat !== null && lng !== null) {
       printers.sort((a, b) => Number(a.distance_km) - Number(b.distance_km));
     }
@@ -273,7 +288,11 @@ async function route(request: Request): Promise<Response> {
 
   const printerMatch = /^\/printers\/([^/]+)$/.exec(path);
   if (method === 'GET' && printerMatch) {
-    const { data, error } = await db.from('printers').select('*').eq('id', decodeURIComponent(printerMatch[1])).maybeSingle();
+    const { data, error } = await db
+      .from('printers')
+      .select('*')
+      .eq('id', decodeURIComponent(printerMatch[1]))
+      .maybeSingle();
     if (error) fail(500, 'DATABASE_ERROR', 'Could not load printer');
     if (!data) fail(404, 'NOT_FOUND', 'Printer not found');
     return json({ printer: data });
@@ -302,38 +321,55 @@ async function route(request: Request): Promise<Response> {
       }
       const quantity = Number(body.quantity ?? 1);
       const infill = Number(body.infill ?? 20);
-      if (!Number.isInteger(quantity) || quantity < 1 || !Number.isInteger(infill) || infill < 0 || infill > 100) {
+      if (
+        !Number.isInteger(quantity) ||
+        quantity < 1 ||
+        !Number.isInteger(infill) ||
+        infill < 0 ||
+        infill > 100
+      ) {
         fail(400, 'VALIDATION_ERROR', 'Invalid quantity or infill');
       }
-      const { data: printer, error: printerError } = await db.from('printers').select('*').eq('id', printerId).maybeSingle();
+      const { data: printer, error: printerError } = await db
+        .from('printers')
+        .select('*')
+        .eq('id', printerId)
+        .maybeSingle();
       if (printerError) fail(500, 'DATABASE_ERROR', 'Could not load printer');
       if (!printer) fail(404, 'NOT_FOUND', 'Printer not found');
 
       const number = crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase();
-      const eta = new Date(Date.now() + Number(printer.est_completion_hours_per_unit || 2) * quantity * 3600000);
-      const { data: order, error } = await db.from('orders').insert({
-        order_number: number,
-        user_id: user.id,
-        model_id: modelId,
-        printer_id: printerId,
-        material,
-        quality,
-        color: typeof body.color === 'string' ? body.color : null,
-        payment_method: body.payment_method === 'PROMPTPAY' ? 'PROMPTPAY' : 'CASH_ON_PICKUP',
-        infill,
-        quantity,
-        price_snapshot: estimatePrice(material, quality, quantity, Number(printer.price_factor)),
-        status: 'CONFIRMED',
-        progress: 0,
-        eta: eta.toISOString(),
-      }).select().single();
+      const eta = new Date(
+        Date.now() + Number(printer.est_completion_hours_per_unit || 2) * quantity * 3600000,
+      );
+      const { data: order, error } = await db
+        .from('orders')
+        .insert({
+          order_number: number,
+          user_id: user.id,
+          model_id: modelId,
+          printer_id: printerId,
+          material,
+          quality,
+          color: typeof body.color === 'string' ? body.color : null,
+          payment_method: body.payment_method === 'PROMPTPAY' ? 'PROMPTPAY' : 'CASH_ON_PICKUP',
+          infill,
+          quantity,
+          price_snapshot: estimatePrice(material, quality, quantity, Number(printer.price_factor)),
+          status: 'CONFIRMED',
+          progress: 0,
+          eta: eta.toISOString(),
+        })
+        .select()
+        .single();
       if (error || !order) fail(500, 'DATABASE_ERROR', 'Could not create order');
       const event = await db.from('order_status_events').insert({
         order_id: order.id,
         status: 'CONFIRMED',
         notes: 'Order created and confirmed.',
       });
-      if (event.error) fail(500, 'DATABASE_ERROR', 'Order created, but its status event could not be saved');
+      if (event.error)
+        fail(500, 'DATABASE_ERROR', 'Order created, but its status event could not be saved');
       return json({ order }, 201);
     }
 
@@ -375,16 +411,28 @@ async function route(request: Request): Promise<Response> {
         if (!current) fail(404, 'NOT_FOUND', 'Order not found');
         let authorized = current.user_id === user.id;
         if (!authorized) {
-          const { data: printer } = await db.from('printers').select('provider_id').eq('id', current.printer_id).maybeSingle();
+          const { data: printer } = await db
+            .from('printers')
+            .select('provider_id')
+            .eq('id', current.printer_id)
+            .maybeSingle();
           if (printer?.provider_id) {
-            const { data: provider } = await db.from('providers').select('user_id').eq('id', printer.provider_id).maybeSingle();
+            const { data: provider } = await db
+              .from('providers')
+              .select('user_id')
+              .eq('id', printer.provider_id)
+              .maybeSingle();
             authorized = provider?.user_id === user.id;
           }
         }
         if (!authorized) fail(403, 'FORBIDDEN', 'You cannot update this order');
         const { data: order, error } = await db
           .from('orders')
-          .update({ status, progress: statusProgress[status], updated_at: new Date().toISOString() })
+          .update({
+            status,
+            progress: statusProgress[status],
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', orderId)
           .select('*, printers(*)')
           .single();
@@ -392,9 +440,13 @@ async function route(request: Request): Promise<Response> {
         const event = await db.from('order_status_events').insert({
           order_id: orderId,
           status,
-          notes: typeof body.notes === 'string' && body.notes ? body.notes : `Status updated to ${status}`,
+          notes:
+            typeof body.notes === 'string' && body.notes
+              ? body.notes
+              : `Status updated to ${status}`,
         });
-        if (event.error) fail(500, 'DATABASE_ERROR', 'Order updated, but its status event could not be saved');
+        if (event.error)
+          fail(500, 'DATABASE_ERROR', 'Order updated, but its status event could not be saved');
         return json({ order });
       }
     }
@@ -420,13 +472,16 @@ async function route(request: Request): Promise<Response> {
       if (notifications) {
         updates.notify_email = notifications.email ?? current.notifications.email;
         updates.notify_push = notifications.push ?? current.notifications.push;
-        updates.notify_order_updates = notifications.orderUpdates ?? current.notifications.orderUpdates;
+        updates.notify_order_updates =
+          notifications.orderUpdates ?? current.notifications.orderUpdates;
         updates.notify_promotions = notifications.promotions ?? current.notifications.promotions;
       }
       const preferences = body.preferences as JsonObject | undefined;
       if (preferences) {
-        if (preferences.material && !isMaterial(preferences.material)) fail(400, 'VALIDATION_ERROR', 'Invalid material preference');
-        if (preferences.quality && !isQuality(preferences.quality)) fail(400, 'VALIDATION_ERROR', 'Invalid quality preference');
+        if (preferences.material && !isMaterial(preferences.material))
+          fail(400, 'VALIDATION_ERROR', 'Invalid material preference');
+        if (preferences.quality && !isQuality(preferences.quality))
+          fail(400, 'VALIDATION_ERROR', 'Invalid quality preference');
         updates.preferred_material = preferences.material ?? current.preferences.material;
         updates.preferred_quality = preferences.quality ?? current.preferences.quality;
       }
@@ -437,11 +492,19 @@ async function route(request: Request): Promise<Response> {
 
     if (method === 'GET' && path === '/profile/stats') {
       const [saved, total, completed] = await Promise.all([
-        db.from('saved_providers').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+        db
+          .from('saved_providers')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
         db.from('orders').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-        db.from('orders').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'READY_FOR_PICKUP'),
+        db
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('status', 'READY_FOR_PICKUP'),
       ]);
-      if (saved.error || total.error || completed.error) fail(500, 'PROFILE_STATS_FAILED', 'Could not load profile statistics');
+      if (saved.error || total.error || completed.error)
+        fail(500, 'PROFILE_STATS_FAILED', 'Could not load profile statistics');
       return json({
         printsCompleted: completed.count ?? 0,
         totalOrders: total.count ?? 0,
@@ -450,21 +513,29 @@ async function route(request: Request): Promise<Response> {
     }
 
     if (method === 'GET' && path === '/profile/saved-providers') {
-      const { data, error } = await db.from('saved_providers').select(`
+      const { data, error } = await db
+        .from('saved_providers')
+        .select(
+          `
         id, provider_id, created_at,
         providers (id, type, display_name, bio, pickup_area, is_open, max_queue_size, pickup_hours,
           is_verified, email_verified_at, phone_verified_at, created_at)
-      `).eq('user_id', user.id).order('created_at', { ascending: false });
+      `,
+        )
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
       if (error) fail(500, 'SAVED_PROVIDERS_FETCH_FAILED', 'Could not load saved providers');
       const savedProviders = (data ?? []).flatMap((row) => {
         const related = Array.isArray(row.providers) ? row.providers[0] : row.providers;
         if (!related) return [];
-        return [{
-          id: row.id,
-          providerId: row.provider_id,
-          createdAt: row.created_at,
-          provider: toPublicProvider(related as unknown as JsonObject),
-        }];
+        return [
+          {
+            id: row.id,
+            providerId: row.provider_id,
+            createdAt: row.created_at,
+            provider: toPublicProvider(related as unknown as JsonObject),
+          },
+        ];
       });
       return json(savedProviders);
     }
@@ -472,28 +543,43 @@ async function route(request: Request): Promise<Response> {
     if (method === 'POST' && path === '/profile/saved-providers') {
       const body = await bodyOf(request);
       const providerId = requireString(body.providerId, 'providerId');
-      const { data: provider, error: providerError } = await db.from('providers')
-        .select('id, type, display_name, bio, pickup_area, is_open, max_queue_size, pickup_hours, is_verified, email_verified_at, phone_verified_at, created_at')
-        .eq('id', providerId).maybeSingle();
+      const { data: provider, error: providerError } = await db
+        .from('providers')
+        .select(
+          'id, type, display_name, bio, pickup_area, is_open, max_queue_size, pickup_hours, is_verified, email_verified_at, phone_verified_at, created_at',
+        )
+        .eq('id', providerId)
+        .maybeSingle();
       if (providerError) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider');
       if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider not found');
-      const { data, error } = await db.from('saved_providers').upsert(
-        { user_id: user.id, provider_id: providerId },
-        { onConflict: 'user_id,provider_id' },
-      ).select('id, provider_id, created_at').single();
+      const { data, error } = await db
+        .from('saved_providers')
+        .upsert(
+          { user_id: user.id, provider_id: providerId },
+          { onConflict: 'user_id,provider_id' },
+        )
+        .select('id, provider_id, created_at')
+        .single();
       if (error || !data) fail(500, 'SAVED_PROVIDER_CREATE_FAILED', 'Could not save provider');
-      return json({
-        id: data.id,
-        providerId: data.provider_id,
-        createdAt: data.created_at,
-        provider: toPublicProvider(provider as unknown as JsonObject),
-      }, 201);
+      return json(
+        {
+          id: data.id,
+          providerId: data.provider_id,
+          createdAt: data.created_at,
+          provider: toPublicProvider(provider as unknown as JsonObject),
+        },
+        201,
+      );
     }
 
     const savedProviderMatch = /^\/profile\/saved-providers\/([^/]+)$/.exec(path);
     if (method === 'DELETE' && savedProviderMatch) {
-      const { data, error } = await db.from('saved_providers').delete().eq('user_id', user.id)
-        .eq('provider_id', decodeURIComponent(savedProviderMatch[1])).select('id');
+      const { data, error } = await db
+        .from('saved_providers')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('provider_id', decodeURIComponent(savedProviderMatch[1]))
+        .select('id');
       if (error) fail(500, 'SAVED_PROVIDER_DELETE_FAILED', 'Could not remove saved provider');
       if (!data?.length) fail(404, 'SAVED_PROVIDER_NOT_FOUND', 'Saved provider not found');
       return json({ success: true });
@@ -505,29 +591,39 @@ async function route(request: Request): Promise<Response> {
     if (method === 'POST' && path === '/providers/onboard') {
       const body = await bodyOf(request);
       const type = body.type;
-      if (type !== 'LAB' && type !== 'INDIVIDUAL') fail(400, 'VALIDATION_ERROR', 'Invalid provider type');
+      if (type !== 'LAB' && type !== 'INDIVIDUAL')
+        fail(400, 'VALIDATION_ERROR', 'Invalid provider type');
       const existing = await providerIdentity(user.id);
       if (existing) fail(409, 'PROVIDER_ALREADY_EXISTS', 'This account is already a provider');
       const availability = (body.availability ?? {}) as JsonObject;
-      const { data, error } = await db.from('providers').insert({
-        user_id: user.id,
-        type,
-        display_name: requireString(body.displayName, 'displayName'),
-        bio: body.bio ?? null,
-        pickup_area: requireString(body.pickupArea, 'pickupArea'),
-        pickup_address: requireString(body.pickupAddress, 'pickupAddress'),
-        latitude: body.latitude ?? null,
-        longitude: body.longitude ?? null,
-        is_open: availability.isOpen ?? true,
-        max_queue_size: availability.maxQueueSize ?? 10,
-        pickup_hours: availability.pickupHours ?? {},
-        is_verified: false,
-        email_verified_at: user.email_confirmed_at ? new Date().toISOString() : null,
-        phone_verified_at: user.phone_confirmed_at ? new Date().toISOString() : null,
-      }).select('*').single();
-      if (error || !data) fail(error?.code === '23505' ? 409 : 500,
-        error?.code === '23505' ? 'PROVIDER_ALREADY_EXISTS' : 'PROVIDER_CREATE_FAILED',
-        error?.code === '23505' ? 'This account is already a provider' : 'Could not create provider');
+      const { data, error } = await db
+        .from('providers')
+        .insert({
+          user_id: user.id,
+          type,
+          display_name: requireString(body.displayName, 'displayName'),
+          bio: body.bio ?? null,
+          pickup_area: requireString(body.pickupArea, 'pickupArea'),
+          pickup_address: requireString(body.pickupAddress, 'pickupAddress'),
+          latitude: body.latitude ?? null,
+          longitude: body.longitude ?? null,
+          is_open: availability.isOpen ?? true,
+          max_queue_size: availability.maxQueueSize ?? 10,
+          pickup_hours: availability.pickupHours ?? {},
+          is_verified: false,
+          email_verified_at: user.email_confirmed_at ? new Date().toISOString() : null,
+          phone_verified_at: user.phone_confirmed_at ? new Date().toISOString() : null,
+        })
+        .select('*')
+        .single();
+      if (error || !data)
+        fail(
+          error?.code === '23505' ? 409 : 500,
+          error?.code === '23505' ? 'PROVIDER_ALREADY_EXISTS' : 'PROVIDER_CREATE_FAILED',
+          error?.code === '23505'
+            ? 'This account is already a provider'
+            : 'Could not create provider',
+        );
       const printer = body.printer as JsonObject | undefined;
       if (printer) {
         const { error: printerError } = await db.from('printers').insert({
@@ -542,13 +638,22 @@ async function route(request: Request): Promise<Response> {
           lng: Number(body.longitude ?? 100.6053),
           location_details: body.pickupArea,
         });
-        if (printerError) fail(500, 'PRINTER_CREATE_FAILED', 'Provider profile saved, but printer details could not be saved');
+        if (printerError)
+          fail(
+            500,
+            'PRINTER_CREATE_FAILED',
+            'Provider profile saved, but printer details could not be saved',
+          );
       }
       return json(toProvider(data as unknown as JsonObject), 201);
     }
 
     if (method === 'GET' && path === '/providers/me') {
-      const { data, error } = await db.from('providers').select('*').eq('user_id', user.id).maybeSingle();
+      const { data, error } = await db
+        .from('providers')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
       if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
       if (!data) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
       return json(toProvider(data as unknown as JsonObject));
@@ -557,7 +662,11 @@ async function route(request: Request): Promise<Response> {
     if (method === 'GET' && path === '/providers/me/printers') {
       const provider = await providerIdentity(user.id);
       if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
-      const { data, error } = await db.from('printers').select('*').eq('provider_id', provider.id).order('created_at');
+      const { data, error } = await db
+        .from('printers')
+        .select('*')
+        .eq('provider_id', provider.id)
+        .order('created_at');
       if (error) fail(500, 'PRINTERS_FETCH_FAILED', 'Could not load your printers');
       return json({ printers: data ?? [] });
     }
@@ -565,19 +674,29 @@ async function route(request: Request): Promise<Response> {
     if (method === 'GET' && path === '/providers/me/orders') {
       const provider = await providerIdentity(user.id);
       if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
-      const { data: printers, error: printerError } = await db.from('printers').select('id').eq('provider_id', provider.id);
+      const { data: printers, error: printerError } = await db
+        .from('printers')
+        .select('id')
+        .eq('provider_id', provider.id);
       if (printerError) fail(500, 'PRINTERS_FETCH_FAILED', 'Could not load your printers');
       const ids = (printers ?? []).map((printer) => printer.id);
       if (!ids.length) return json({ orders: [] });
-      const { data, error } = await db.from('orders').select('*, printers(*), order_status_events(*)')
-        .in('printer_id', ids).order('created_at', { ascending: false });
+      const { data, error } = await db
+        .from('orders')
+        .select('*, printers(*), order_status_events(*)')
+        .in('printer_id', ids)
+        .order('created_at', { ascending: false });
       if (error) fail(500, 'ORDERS_FETCH_FAILED', 'Could not load provider orders');
       return json({ orders: data ?? [] });
     }
 
     if (method === 'PATCH' && path === '/providers/me') {
       const body = await bodyOf(request);
-      const { data: current, error: currentError } = await db.from('providers').select('*').eq('user_id', user.id).maybeSingle();
+      const { data: current, error: currentError } = await db
+        .from('providers')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
       if (currentError) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
       if (!current) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
       const updates: JsonObject = { updated_at: new Date().toISOString() };
@@ -588,12 +707,21 @@ async function route(request: Request): Promise<Response> {
       const availability = body.availability as JsonObject | undefined;
       if (availability) {
         if (availability.isOpen !== undefined) updates.is_open = availability.isOpen;
-        if (availability.maxQueueSize !== undefined) updates.max_queue_size = availability.maxQueueSize;
+        if (availability.maxQueueSize !== undefined)
+          updates.max_queue_size = availability.maxQueueSize;
         if (availability.pickupHours !== undefined) {
-          updates.pickup_hours = { ...(current.pickup_hours ?? {}), ...availability.pickupHours as object };
+          updates.pickup_hours = {
+            ...(current.pickup_hours ?? {}),
+            ...(availability.pickupHours as object),
+          };
         }
       }
-      const { data, error } = await db.from('providers').update(updates).eq('user_id', user.id).select('*').single();
+      const { data, error } = await db
+        .from('providers')
+        .update(updates)
+        .eq('user_id', user.id)
+        .select('*')
+        .single();
       if (error || !data) fail(500, 'PROVIDER_UPDATE_FAILED', 'Could not update provider profile');
       return json(toProvider(data as unknown as JsonObject));
     }
