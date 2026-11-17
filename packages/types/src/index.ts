@@ -126,7 +126,7 @@ export interface Order {
   id: string;
   order_number: string;
   user_id: string | null;
-  model_id: string;
+  model_id?: string;
   modelId: string;
   printer_id: string;
   material: Material;
