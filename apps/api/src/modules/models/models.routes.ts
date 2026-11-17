@@ -1,10 +1,14 @@
 import { Router } from 'express';
-import { getUploadUrl, processModel } from './models.controller';
 import { requireAuth } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/error';
+import { createModel, getModel, getUploadUrl } from './models.controller';
 
 const router = Router();
 
-router.post('/upload-url', requireAuth, getUploadUrl);
-router.post('/:id/process', requireAuth, processModel);
+router.use(requireAuth);
+
+router.post('/upload-url', asyncHandler(getUploadUrl));
+router.post('/', asyncHandler(createModel));
+router.get('/:id', asyncHandler(getModel));
 
 export default router;

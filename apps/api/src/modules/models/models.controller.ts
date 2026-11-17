@@ -1,74 +1,62 @@
-import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
-import dotenv from 'dotenv';
+import { AppError } from '../../middleware/error';
+import { createUploadUrl, getModelById, processAndSaveModel } from './models.service';
 
-dotenv.config();
+export const uploadUrlSchema = z.object({
+  fileName: z
+    .string()
+    .min(1, 'File name is required')
+    .refine(
+      (name) => /\.(stl|obj|3mf)$/i.test(name),
+      'Only .stl, .obj, and .3mf files are supported',
+    ),
+  sizeBytes: z
+    .number()
+    .int('File size must be an integer')
+    .positive('File size must be positive')
+    .max(52428800, 'File size exceeds maximum limit of 50 MB'),
+});
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing Supabase environment variables');
+export const createModelSchema = z.object({
+  path: z.string().min(1, 'Storage path is required'),
+});
+
+export async function getUploadUrl(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
+  }
+
+  const { fileName, sizeBytes } = uploadUrlSchema.parse(req.body);
+  const result = await createUploadUrl(userId, fileName, sizeBytes);
+
+  res.status(200).json(result);
 }
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-const uploadUrlSchema = z.object({
-  fileName: z.string().min(1),
-});
-
-export const getUploadUrl = async (req: Request, res: Response) => {
-  try {
-    const { fileName } = uploadUrlSchema.parse(req.body);
-    const { data, error } = await supabase.storage
-      .from('models')
-      .createSignedUrl(fileName, 60 * 10); // 10 minutes
-
-    if (error) throw error;
-
-    res.json({ url: data.signedUrl });
-  } catch (error) {
-    res.status(400).json({
-      error: {
-        code: 'UPLOAD_URL_ERROR',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-    });
+export async function createModel(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
   }
-};
 
-const processSchema = z.object({
-  material: z.enum(['PLA', 'ABS', 'PETG', 'TPU']),
-});
+  const { path } = createModelSchema.parse(req.body);
+  const metadata = await processAndSaveModel(userId, path);
 
-export const processModel = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { material } = processSchema.parse(req.body);
+  res.status(201).json(metadata);
+}
 
-    const { data: file, error: getError } = await supabase.storage
-      .from('models')
-      .download(id || '');
-
-    if (getError || !file) throw new Error('File not found');
-
-    // Mock parser (replace with actual STL/3MF/OBJ parser later)
-    const dimensions = { x: 10, y: 10, z: 10 }; // mm
-    const volume = 12.5; // cm³, placeholder calculation
-
-    await supabase.from('model_files').insert({
-      id,
-      user_id: req.user?.id || '',
-      file_name: id,
-      material,
-      volume_cm3: volume,
-      dimensions,
-    });
-
-    res.json({ id, dimensions, volume });
-  } catch (error) {
-    res.status(400).json({
-      error: {
-        code: 'PROCESS_MODEL_ERROR',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-    });
+export async function getModel(req: Request, res: Response): Promise<void> {
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new AppError(401, 'UNAUTHORIZED', 'Authentication required');
   }
-};
+
+  const { id } = req.params;
+  if (!id) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Model ID is required');
+  }
+
+  const model = await getModelById(userId, id);
+  res.status(200).json(model);
+}
