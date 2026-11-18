@@ -2,6 +2,12 @@ import { getAuthUser } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/error';
 import { onboardProviderSchema, updateProviderSchema } from './providers.schemas';
 import * as providerService from './providers.service';
+import { searchProviders } from './providers.search';
+
+export const searchProvidersHandler = asyncHandler(async (req, res) => {
+  const providers = await searchProviders(req.query as Record<string, unknown>);
+  res.status(200).json({ providers });
+});
 
 export const onboardProvider = asyncHandler(async (req, res) => {
   const user = getAuthUser(req);
