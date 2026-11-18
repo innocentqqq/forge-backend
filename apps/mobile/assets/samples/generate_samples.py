@@ -1,4 +1,4 @@
-"""Regenerate the binary STL fixtures used by the ModelViewer dev screen.
+"""Regenerate the STL/OBJ fixtures used by the ModelViewer dev screen.
 
 All dimensions are in millimetres. Run from anywhere with:
     python3 apps/mobile/assets/samples/generate_samples.py
@@ -99,10 +99,40 @@ def write_binary_stl(name: str, triangles: list[Triangle]) -> None:
     print(f"{path.name}: {len(triangles)} triangles, {path.stat().st_size} bytes")
 
 
+def write_obj_cube(name: str) -> None:
+    """10 mm cube as quads, so the OBJ loader's triangulation path is exercised."""
+    path = OUT_DIR / name
+    vertices = [
+        (-5, -5, 0),
+        (5, -5, 0),
+        (5, 5, 0),
+        (-5, 5, 0),
+        (-5, -5, 10),
+        (5, -5, 10),
+        (5, 5, 10),
+        (-5, 5, 10),
+    ]
+    # Outward-facing quad loops (1-based OBJ indices).
+    faces = [
+        (4, 3, 2, 1),  # bottom
+        (5, 6, 7, 8),  # top
+        (1, 2, 6, 5),  # front
+        (2, 3, 7, 6),  # right
+        (3, 4, 8, 7),  # back
+        (4, 1, 5, 8),  # left
+    ]
+    lines = [f"# Forge sample: {name}"]
+    lines += [f"v {x} {y} {z}" for x, y, z in vertices]
+    lines += ["f " + " ".join(str(index) for index in face) for face in faces]
+    path.write_text("\n".join(lines) + "\n", encoding="ascii")
+    print(f"{path.name}: {len(faces)} quads, {path.stat().st_size} bytes")
+
+
 SAMPLES = (
-    ("small-cube.stl", "Small cube", "smallCube"),
-    ("large-box.stl", "Large box", "largeBox"),
-    ("frame-with-hole.stl", "Frame with hole", "frameWithHole"),
+    ("small-cube.stl", "Small cube (STL)", "smallCube", "stl"),
+    ("small-cube.obj", "Small cube (OBJ)", "smallCubeObj", "obj"),
+    ("large-box.stl", "Large box (STL)", "largeBox", "stl"),
+    ("frame-with-hole.stl", "Frame with hole (STL)", "frameWithHole", "stl"),
 )
 
 MODULE_PATH = OUT_DIR.parent.parent / "components" / "ModelViewer" / "sample-data.ts"
@@ -121,13 +151,16 @@ def write_sample_data_module() -> None:
         "}",
         "",
     ]
-    for filename, label, identifier in SAMPLES:
+    for filename, label, identifier, model_format in SAMPLES:
         encoded = base64.b64encode((OUT_DIR / filename).read_bytes()).decode("ascii")
-        lines.append(f"const {identifier} = 'data:model/stl;base64,{encoded}';")
+        lines.append(f"const {identifier} = 'data:model/{model_format};base64,{encoded}';")
     lines += [
         "",
         "export const SAMPLE_MODELS: SampleModel[] = [",
-        *[f"  {{ label: {label!r}, format: 'stl', url: {identifier} }}," for _, label, identifier in SAMPLES],
+        *[
+            f"  {{ label: {label!r}, format: {model_format!r}, url: {identifier} }},"
+            for _, label, identifier, model_format in SAMPLES
+        ],
         "];",
         "",
     ]
@@ -137,6 +170,7 @@ def write_sample_data_module() -> None:
 
 if __name__ == "__main__":
     write_binary_stl("small-cube.stl", box(-5, 5, -5, 5, 0, 10))
+    write_obj_cube("small-cube.obj")
     write_binary_stl("large-box.stl", box(-160, 160, -110, 110, 0, 300))
     write_binary_stl("frame-with-hole.stl", frame_with_hole())
     write_sample_data_module()

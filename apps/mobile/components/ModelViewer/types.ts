@@ -1,20 +1,9 @@
+import type { BoundingBox, ModelFormat } from '@forge/types';
 import type { BufferGeometry } from 'three';
 
-/**
- * Viewer-side copy of the shared contract in docs/AGENTS.md.
- *
- * Agent 1 owns `packages/types/src/index.ts`; these aliases are kept here until
- * `ModelFormat` / `BoundingBox` land there, so this component does not need to
- * edit another agent's files. Switch to `import type` from `@forge/types` once
- * that PR is merged.
- */
-export type ModelFormat = 'stl' | 'obj' | '3mf';
-
-export interface BoundingBox {
-  x: number;
-  y: number;
-  z: number;
-}
+// Re-exported so viewer internals keep a single import path, while the source
+// of truth stays in `@forge/types`.
+export type { BoundingBox, ModelFormat };
 
 export interface ModelViewerProps {
   /** Signed URL of the model file (or a base64 data URL for bundled samples). */
