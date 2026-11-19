@@ -1,176 +1,244 @@
-import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { supabaseAdmin } from '../../config/supabase';
+import { getAuthUser } from '../../middleware/auth';
+import { AppError, asyncHandler } from '../../middleware/error';
 import { estimatePrice } from '../pricing/pricing.service';
 
-const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321';
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy-key';
-const supabase = createClient(supabaseUrl, supabaseKey);
+/**
+ * Orders API. The Supabase Edge Function (supabase/functions/forge-api) is the
+ * deployed implementation; keep the two in sync — same fields, statuses and rules.
+ */
+
+const ORDER_SELECT = '*, printers(*), order_status_events(*)';
+
+/** Progress shown for each status. CANCELLED / DECLINED end the order. */
+export const STATUS_PROGRESS = {
+  PENDING_ACCEPTANCE: 0,
+  CONFIRMED: 10,
+  IN_QUEUE: 30,
+  PRINTING: 75,
+  READY_FOR_PICKUP: 100,
+  DECLINED: 0,
+  CANCELLED: 0,
+} as const;
+
+export type OrderStatusValue = keyof typeof STATUS_PROGRESS;
+const ORDER_STATUSES = Object.keys(STATUS_PROGRESS) as [OrderStatusValue, ...OrderStatusValue[]];
+
+/** A customer may only cancel, and only before the provider starts the job. */
+const CUSTOMER_CANCELLABLE: OrderStatusValue[] = ['PENDING_ACCEPTANCE', 'CONFIRMED'];
+
+export const createOrderSchema = z.object({
+  model_id: z.string().uuid(),
+  printer_id: z.string().uuid(),
+  material: z.enum(['PLA', 'ABS', 'PETG', 'TPU']),
+  quality: z.enum(['DRAFT', 'STANDARD', 'HIGH']),
+  color: z.string().trim().min(1).max(40).optional(),
+  payment_method: z.enum(['CASH_ON_PICKUP', 'PROMPTPAY']).default('CASH_ON_PICKUP'),
+  infill: z.number().int().min(0).max(100).default(20),
+  quantity: z.number().int().min(1).max(100).default(1),
+});
+
+export const updateStatusSchema = z.object({
+  status: z.enum(ORDER_STATUSES),
+  notes: z.string().trim().max(500).optional(),
+});
+
+const idSchema = z.string().uuid();
 
 function generateOrderNumber(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 7; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  return randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase();
 }
 
-export async function createOrder(req: Request, res: Response) {
-  try {
-    const userId = (req as Request & { user?: { id: string; email: string } }).user?.id || null;
-    const { model_id, printer_id, material, quality, infill = 20, quantity = 1 } = req.body;
+function parseId(value: unknown): string {
+  const parsed = idSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError(404, 'NOT_FOUND', 'Order not found');
+  }
+  return parsed.data;
+}
 
-    if (!model_id || !printer_id || !material || !quality) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Missing required fields: model_id, printer_id, material, quality',
-        },
-      });
-    }
+async function insertStatusEvent(orderId: string, status: OrderStatusValue, notes: string) {
+  const { error } = await supabaseAdmin
+    .from('order_status_events')
+    .insert({ order_id: orderId, status, notes });
+  if (error) {
+    throw new AppError(
+      500,
+      'DATABASE_ERROR',
+      'Order saved, but its status event could not be saved',
+    );
+  }
+}
 
-    const { data: printer, error: printerError } = await supabase
-      .from('printers')
-      .select('*')
-      .eq('id', printer_id)
-      .single();
+/** True when `userId` owns the provider that owns `printerId`. */
+async function isPrinterOwner(userId: string, printerId: string): Promise<boolean> {
+  const { data: printer, error: printerError } = await supabaseAdmin
+    .from('printers')
+    .select('provider_id')
+    .eq('id', printerId)
+    .maybeSingle();
+  if (printerError) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load printer');
+  }
+  if (!printer?.provider_id) {
+    return false;
+  }
 
-    if (printerError || !printer) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Printer not found' } });
-    }
+  const { data: provider, error: providerError } = await supabaseAdmin
+    .from('providers')
+    .select('user_id')
+    .eq('id', printer.provider_id)
+    .maybeSingle();
+  if (providerError) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load provider');
+  }
+  return provider?.user_id === userId;
+}
 
-    let unitPrice = 100;
-    try {
-      if (typeof estimatePrice === 'function') {
-        const basePrice = estimatePrice({ material, volumeCm3: 20, quantity: 1, quality });
-        unitPrice = basePrice * Number(printer.price_factor);
-      }
-    } catch (_e) {
-      unitPrice = 100 * Number(printer.price_factor);
-    }
+export const createOrder = asyncHandler(async (req, res) => {
+  const user = getAuthUser(req);
+  const input = createOrderSchema.parse(req.body);
 
-    const priceSnapshot = unitPrice * Number(quantity);
-    const orderNumber = generateOrderNumber();
+  const { data: printer, error: printerError } = await supabaseAdmin
+    .from('printers')
+    .select('*')
+    .eq('id', input.printer_id)
+    .maybeSingle();
+  if (printerError) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load printer');
+  }
+  if (!printer) {
+    throw new AppError(404, 'NOT_FOUND', 'Printer not found');
+  }
 
-    const hoursPerUnit = Number(printer.est_completion_hours_per_unit || 2);
-    const totalHours = hoursPerUnit * Number(quantity);
-    const eta = new Date(Date.now() + totalHours * 3600 * 1000);
+  // Pricing is still a placeholder (fixed volume); tracked separately.
+  const priceFactor = Number(printer.price_factor) || 1;
+  const unitPrice =
+    estimatePrice({
+      material: input.material,
+      volumeCm3: 20,
+      quantity: 1,
+      quality: input.quality,
+    }) * priceFactor;
+  const priceSnapshot = Math.round(unitPrice * input.quantity * 100) / 100;
 
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        order_number: orderNumber,
-        user_id: userId,
-        model_id,
-        printer_id,
-        material,
-        quality,
-        infill,
-        quantity,
-        price_snapshot: priceSnapshot,
-        status: 'CONFIRMED',
-        progress: 0,
-        eta: eta.toISOString(),
-      })
-      .select()
-      .single();
+  const hoursPerUnit = Number(printer.est_completion_hours_per_unit) || 2;
+  const eta = new Date(Date.now() + hoursPerUnit * input.quantity * 3600 * 1000);
 
-    if (orderError) {
-      return res
-        .status(500)
-        .json({ error: { code: 'DATABASE_ERROR', message: orderError.message } });
-    }
-
-    await supabase.from('order_status_events').insert({
-      order_id: order.id,
+  const { data: order, error: orderError } = await supabaseAdmin
+    .from('orders')
+    .insert({
+      order_number: generateOrderNumber(),
+      user_id: user.id,
+      model_id: input.model_id,
+      printer_id: input.printer_id,
+      material: input.material,
+      quality: input.quality,
+      color: input.color ?? null,
+      payment_method: input.payment_method,
+      infill: input.infill,
+      quantity: input.quantity,
+      price_snapshot: priceSnapshot,
       status: 'CONFIRMED',
-      notes: 'Order created and confirmed.',
-    });
-
-    return res.status(201).json({ order });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
+      progress: 0,
+      eta: eta.toISOString(),
+    })
+    .select()
+    .single();
+  if (orderError || !order) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not create order');
   }
-}
 
-export async function getOrders(_req: Request, res: Response) {
-  try {
-    const query = supabase.from('orders').select('*, printers(*), order_status_events(*)');
+  await insertStatusEvent(order.id, 'CONFIRMED', 'Order created and confirmed.');
 
-    const { data: orders, error } = await query.order('created_at', { ascending: false });
-    if (error) {
-      return res.status(500).json({ error: { code: 'DATABASE_ERROR', message: error.message } });
-    }
+  res.status(201).json({ order });
+});
 
-    return res.json({ orders });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
+/** The caller's own orders only. Providers use GET /providers/me/orders. */
+export const getOrders = asyncHandler(async (req, res) => {
+  const user = getAuthUser(req);
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .select(ORDER_SELECT)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+  if (error) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load orders');
   }
-}
+  res.json({ orders: data ?? [] });
+});
 
-export async function getOrderById(req: Request, res: Response) {
-  try {
-    const { id } = req.params;
-    const { data: order, error } = await supabase
-      .from('orders')
-      .select('*, printers(*), order_status_events(*)')
-      .eq('id', id)
-      .single();
-
-    if (error || !order) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Order not found' } });
-    }
-
-    return res.json({ order });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
+/** 404 (not 403) for other users' orders so ids cannot be probed. */
+export const getOrderById = asyncHandler(async (req, res) => {
+  const user = getAuthUser(req);
+  const id = parseId(req.params.id);
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .select(ORDER_SELECT)
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (error) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load order');
   }
-}
-
-export async function updateOrderStatus(req: Request, res: Response) {
-  try {
-    const { id } = req.params;
-    const { status, notes } = req.body;
-
-    const validStatuses = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
-    if (!validStatuses.includes(status)) {
-      return res
-        .status(400)
-        .json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid order status' } });
-    }
-
-    let progress = 0;
-    if (status === 'CONFIRMED') progress = 10;
-    else if (status === 'IN_QUEUE') progress = 30;
-    else if (status === 'PRINTING') progress = 75;
-    else if (status === 'READY_FOR_PICKUP') progress = 100;
-
-    const { data: order, error: updateError } = await supabase
-      .from('orders')
-      .update({ status, progress, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select('*, printers(*)')
-      .single();
-
-    if (updateError || !order) {
-      return res
-        .status(404)
-        .json({ error: { code: 'NOT_FOUND', message: 'Order not found or update failed' } });
-    }
-
-    await supabase.from('order_status_events').insert({
-      order_id: id,
-      status,
-      notes: notes || `Status updated to ${status}`,
-    });
-
-    return res.json({ order });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
+  if (!data) {
+    throw new AppError(404, 'NOT_FOUND', 'Order not found');
   }
-}
+  res.json({ order: data });
+});
+
+/**
+ * Status changes:
+ * - the provider that owns the order's printer may set any status;
+ * - the customer may only CANCEL, and only while the order is not yet in production.
+ */
+export const updateOrderStatus = asyncHandler(async (req, res) => {
+  const user = getAuthUser(req);
+  const id = parseId(req.params.id);
+  const { status, notes } = updateStatusSchema.parse(req.body);
+
+  const { data: current, error: currentError } = await supabaseAdmin
+    .from('orders')
+    .select('id, user_id, printer_id, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (currentError) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load order');
+  }
+  if (!current) {
+    throw new AppError(404, 'NOT_FOUND', 'Order not found');
+  }
+
+  const isOwner = current.user_id === user.id;
+  const isProvider = await isPrinterOwner(user.id, current.printer_id);
+  if (!isOwner && !isProvider) {
+    throw new AppError(404, 'NOT_FOUND', 'Order not found');
+  }
+  if (!isProvider) {
+    const canCancel =
+      status === 'CANCELLED' && CUSTOMER_CANCELLABLE.includes(current.status as OrderStatusValue);
+    if (!canCancel) {
+      throw new AppError(
+        403,
+        'FORBIDDEN',
+        'Only the printer provider can change this order status',
+      );
+    }
+  }
+
+  const { data: order, error: updateError } = await supabaseAdmin
+    .from('orders')
+    .update({ status, progress: STATUS_PROGRESS[status], updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*, printers(*)')
+    .single();
+  if (updateError || !order) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not update order');
+  }
+
+  await insertStatusEvent(id, status, notes || `Status updated to ${status}`);
+
+  res.json({ order });
+});

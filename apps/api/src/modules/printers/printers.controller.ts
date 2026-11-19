@@ -1,11 +1,8 @@
-import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
+import { supabaseAdmin } from '../../config/supabase';
+import { AppError, asyncHandler } from '../../middleware/error';
 
-const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321';
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy-key';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
+/** Great-circle distance in km (Haversine). */
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = deg2rad(lat2 - lat1);
@@ -21,64 +18,57 @@ function deg2rad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-export async function getPrinters(req: Request, res: Response) {
-  try {
-    const latStr = req.query.lat as string;
-    const lngStr = req.query.lng as string;
-    const sort = (req.query.sort as string) || 'nearest';
+const listQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  sort: z.enum(['nearest', 'cheapest', 'fastest']).default('nearest'),
+});
 
-    const { data: printers, error } = await supabase.from('printers').select('*');
-    if (error) {
-      return res.status(500).json({ error: { code: 'DATABASE_ERROR', message: error.message } });
-    }
+export const getPrinters = asyncHandler(async (req, res) => {
+  const { lat, lng, sort } = listQuerySchema.parse(req.query);
 
-    const userLat: number | null = latStr ? parseFloat(latStr) : null;
-    const userLng: number | null = lngStr ? parseFloat(lngStr) : null;
-
-    const enrichedPrinters = printers.map((p) => {
-      let distance = null;
-      if (userLat !== null && userLng !== null) {
-        distance = calculateDistance(userLat, userLng, Number(p.lat), Number(p.lng));
-      }
-      return {
-        ...p,
-        distance_km: distance,
-      };
-    });
-
-    if (sort === 'cheapest') {
-      enrichedPrinters.sort((a, b) => Number(a.price_factor) - Number(b.price_factor));
-    } else if (sort === 'fastest') {
-      enrichedPrinters.sort(
-        (a, b) => Number(a.est_completion_hours_per_unit) - Number(b.est_completion_hours_per_unit),
-      );
-    } else {
-      if (userLat !== null && userLng !== null) {
-        enrichedPrinters.sort((a, b) => (a.distance_km || 0) - (b.distance_km || 0));
-      }
-    }
-
-    return res.json({ printers: enrichedPrinters });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
+  const { data, error } = await supabaseAdmin.from('printers').select('*');
+  if (error) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load printers');
   }
-}
 
-export async function getPrinterById(req: Request, res: Response) {
-  try {
-    const { id } = req.params;
-    const { data: printer, error } = await supabase
-      .from('printers')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error || !printer) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Printer not found' } });
-    }
-    return res.json({ printer });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
+  const hasLocation = lat !== undefined && lng !== undefined;
+  const printers = (data ?? []).map((printer) => ({
+    ...printer,
+    distance_km: hasLocation
+      ? calculateDistance(lat, lng, Number(printer.lat), Number(printer.lng))
+      : null,
+  }));
+
+  if (sort === 'cheapest') {
+    printers.sort((a, b) => Number(a.price_factor) - Number(b.price_factor));
+  } else if (sort === 'fastest') {
+    printers.sort(
+      (a, b) => Number(a.est_completion_hours_per_unit) - Number(b.est_completion_hours_per_unit),
+    );
+  } else if (hasLocation) {
+    printers.sort((a, b) => Number(a.distance_km) - Number(b.distance_km));
   }
-}
+
+  res.json({ printers });
+});
+
+export const getPrinterById = asyncHandler(async (req, res) => {
+  const id = z.string().uuid().safeParse(req.params.id);
+  if (!id.success) {
+    throw new AppError(404, 'NOT_FOUND', 'Printer not found');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('printers')
+    .select('*')
+    .eq('id', id.data)
+    .maybeSingle();
+  if (error) {
+    throw new AppError(500, 'DATABASE_ERROR', 'Could not load printer');
+  }
+  if (!data) {
+    throw new AppError(404, 'NOT_FOUND', 'Printer not found');
+  }
+  res.json({ printer: data });
+});

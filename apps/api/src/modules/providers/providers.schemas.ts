@@ -25,6 +25,29 @@ export const providerAvailabilitySchema = z
   })
   .strict();
 
+const buildVolumeSchema = z
+  .object({
+    x: z.number().positive().max(2000),
+    y: z.number().positive().max(2000),
+    z: z.number().positive().max(2000),
+  })
+  .strict();
+
+/** First printer listed during onboarding (same shape as OnboardProviderInput['printer']). */
+export const onboardPrinterSchema = z
+  .object({
+    modelName: z.string().trim().min(1).max(120),
+    buildVolume: buildVolumeSchema.optional(),
+    materials: z
+      .array(z.enum(['PLA', 'ABS', 'PETG', 'TPU']))
+      .min(1)
+      .max(4)
+      .optional(),
+    pricePerCm3: z.number().positive().max(10000).optional(),
+    minimumOrder: z.number().nonnegative().max(1000000).optional(),
+  })
+  .strict();
+
 const providerFields = {
   type: providerTypeSchema,
   displayName: z.string().trim().min(1).max(120),
@@ -37,7 +60,7 @@ const providerFields = {
 };
 
 export const onboardProviderSchema = z
-  .object(providerFields)
+  .object({ ...providerFields, printer: onboardPrinterSchema.optional() })
   .strict()
   .superRefine((value, ctx) => {
     const hasLatitude = value.latitude !== undefined && value.latitude !== null;

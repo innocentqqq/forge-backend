@@ -8,3 +8,10 @@ export const providersRouter = Router();
 providersRouter.post('/onboard', requireAuth, providerController.onboardProvider);
 providersRouter.get('/me', requireAuth, requireProvider, providerController.getMyProvider);
 providersRouter.patch('/me', requireAuth, requireProvider, providerController.updateMyProvider);
+providersRouter.get(
+  '/me/printers',
+  requireAuth,
+  requireProvider,
+  providerController.listMyPrinters,
+);
+providersRouter.get('/me/orders', requireAuth, requireProvider, providerController.listMyOrders);

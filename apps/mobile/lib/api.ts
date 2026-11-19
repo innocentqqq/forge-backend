@@ -136,17 +136,18 @@ export const api = {
     return request<{ order: Order }>('/orders', { method: 'POST', body: input });
   },
 
-  createModelUploadUrl(fileName: string) {
-    return request<{ url: string; token: string; path: string }>('/models/upload-url', {
-      method: 'POST',
-      body: { fileName },
-    });
+  /** The server picks the storage path (`<userId>/<id>`) and returns the model `id`. */
+  createModelUploadUrl(fileName: string, size?: number) {
+    return request<{ id: string; fileName: string; url: string; token: string; path: string }>(
+      '/models/upload-url',
+      { method: 'POST', body: { fileName, size } },
+    );
   },
 
-  processModel(id: string, material: Material) {
+  processModel(id: string, material: Material, fileName?: string) {
     return request<{ id: string; dimensions: { x: number; y: number; z: number }; volume: number }>(
       `/models/${encodeURIComponent(id)}/process`,
-      { method: 'POST', body: { material } },
+      { method: 'POST', body: { material, fileName } },
     );
   },
 

@@ -14,13 +14,6 @@ import type { Printer } from '../../lib/types';
 type PickedFile = { name: string; uri?: string; mimeType?: string; size?: number; file?: unknown };
 type PickerModule = { getDocumentAsync: (options: { type: string[]; copyToCacheDirectory: boolean; multiple: boolean }) => Promise<{ canceled: boolean; assets?: PickedFile[] }> };
 
-function newId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.floor(Math.random() * 16);
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -52,14 +45,14 @@ export default function HomeScreen() {
   const uploadFile = async (file: PickedFile, body: unknown) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['stl', '3mf', 'obj'].includes(ext ?? '')) throw new Error('Choose an STL, 3MF, or OBJ file.');
-    const fileId = newId();
-    const signed = await api.createModelUploadUrl(fileId);
+    if (typeof file.size === 'number' && file.size > 50 * 1024 * 1024) throw new Error('Choose a file under 50 MB.');
+    const signed = await api.createModelUploadUrl(file.name, file.size);
     const content = body ?? (file.uri ? await fetch(file.uri).then((response) => response.blob()) : null);
     if (!content) throw new Error('Could not read the selected file.');
     const { error: uploadError } = await supabase.storage.from('models').uploadToSignedUrl(signed.path, signed.token, content as Blob, { contentType: file.mimeType ?? 'application/octet-stream' });
     if (uploadError) throw uploadError;
-    await api.processModel(fileId, 'PLA');
-    router.push({ pathname: '/print-settings' as never, params: { modelId: fileId, fileName: file.name } });
+    await api.processModel(signed.id, 'PLA', file.name);
+    router.push({ pathname: '/print-settings' as never, params: { modelId: signed.id, fileName: file.name } });
   };
 
   const chooseDesign = async () => {

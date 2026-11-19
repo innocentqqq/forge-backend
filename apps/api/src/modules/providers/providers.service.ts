@@ -1,3 +1,4 @@
+import type { Order, Printer } from '@forge/types';
 import type { AuthUser } from '../../middleware/auth';
 import { AppError } from '../../middleware/error';
 import { supabaseAdmin } from '../../config/supabase';
@@ -100,7 +101,62 @@ export async function onboardProvider(
     throw new AppError(500, 'PROVIDER_CREATE_FAILED', 'Could not create provider');
   }
 
-  return toProvider(data as ProviderRow);
+  const row = data as ProviderRow;
+  if (input.printer) {
+    const printer = input.printer;
+    const { error: printerError } = await supabaseAdmin.from('printers').insert({
+      provider_id: row.id,
+      name: printer.modelName,
+      model_name: printer.modelName,
+      build_volume: printer.buildVolume ?? { x: 220, y: 220, z: 250 },
+      materials: printer.materials ?? ['PLA'],
+      price_per_cm3: printer.pricePerCm3 ?? 0.05,
+      minimum_order: printer.minimumOrder ?? 5,
+      lat: input.latitude ?? 13.8708,
+      lng: input.longitude ?? 100.6053,
+      location_details: input.pickupArea,
+    });
+    if (printerError) {
+      throw new AppError(
+        500,
+        'PRINTER_CREATE_FAILED',
+        'Provider profile saved, but printer details could not be saved',
+      );
+    }
+  }
+
+  return toProvider(row);
+}
+
+/** Printers owned by a provider (GET /providers/me/printers). */
+export async function listProviderPrinters(providerId: string): Promise<Printer[]> {
+  const { data, error } = await supabaseAdmin
+    .from('printers')
+    .select('*')
+    .eq('provider_id', providerId)
+    .order('created_at');
+  if (error) {
+    throw new AppError(500, 'PRINTERS_FETCH_FAILED', 'Could not load your printers');
+  }
+  return (data ?? []) as Printer[];
+}
+
+/** Orders placed on any of the provider's printers (GET /providers/me/orders). */
+export async function listProviderOrders(providerId: string): Promise<Order[]> {
+  const printers = await listProviderPrinters(providerId);
+  const ids = printers.map((printer) => printer.id);
+  if (!ids.length) {
+    return [];
+  }
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .select('*, printers(*), order_status_events(*)')
+    .in('printer_id', ids)
+    .order('created_at', { ascending: false });
+  if (error) {
+    throw new AppError(500, 'ORDERS_FETCH_FAILED', 'Could not load provider orders');
+  }
+  return (data ?? []) as Order[];
 }
 
 export async function getMyProvider(userId: string): Promise<Provider> {

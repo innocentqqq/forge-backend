@@ -77,6 +77,19 @@ function requireString(value: unknown, name: string): string {
   return value.trim();
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
+const MODELS_BUCKET = 'models';
+const MODEL_EXTENSIONS = ['stl', '3mf', 'obj'];
+const MAX_MODEL_BYTES = 50 * 1024 * 1024;
+/** Server-chosen object path: a user can only touch their own folder. */
+function modelObjectPath(userId: string, modelId: string): string {
+  return `${userId}/${modelId}`;
+}
+
 function isMaterial(value: unknown): value is 'PLA' | 'ABS' | 'PETG' | 'TPU' {
   return ['PLA', 'ABS', 'PETG', 'TPU'].includes(String(value));
 }
@@ -314,6 +327,9 @@ async function route(request: Request): Promise<Response> {
       const body = await bodyOf(request);
       const modelId = requireString(body.model_id, 'model_id');
       const printerId = requireString(body.printer_id, 'printer_id');
+      if (!isUuid(modelId) || !isUuid(printerId)) {
+        fail(400, 'VALIDATION_ERROR', 'model_id and printer_id must be UUIDs');
+      }
       const material = body.material;
       const quality = body.quality;
       if (!isMaterial(material) || !isQuality(quality)) {
@@ -376,6 +392,7 @@ async function route(request: Request): Promise<Response> {
     const orderMatch = /^\/orders\/([^/]+)(?:\/status)?$/.exec(path);
     if (orderMatch) {
       const orderId = decodeURIComponent(orderMatch[1]);
+      if (!isUuid(orderId)) fail(404, 'NOT_FOUND', 'Order not found');
       if (method === 'GET' && path === `/orders/${orderMatch[1]}`) {
         const { data, error } = await db
           .from('orders')
@@ -398,19 +415,23 @@ async function route(request: Request): Promise<Response> {
           PRINTING: 75,
           READY_FOR_PICKUP: 100,
           DECLINED: 0,
+          CANCELLED: 0,
         };
         if (typeof status !== 'string' || statusProgress[status] === undefined) {
           fail(400, 'VALIDATION_ERROR', 'Invalid order status');
         }
         const { data: current, error: currentError } = await db
           .from('orders')
-          .select('id, user_id, printer_id')
+          .select('id, user_id, printer_id, status')
           .eq('id', orderId)
           .maybeSingle();
         if (currentError) fail(500, 'DATABASE_ERROR', 'Could not load order');
         if (!current) fail(404, 'NOT_FOUND', 'Order not found');
-        let authorized = current.user_id === user.id;
-        if (!authorized) {
+        // The provider that owns the printer may set any status; the customer may
+        // only cancel, and only before the job is in production (same rule as Express).
+        const isOwner = current.user_id === user.id;
+        let isProvider = false;
+        {
           const { data: printer } = await db
             .from('printers')
             .select('provider_id')
@@ -422,10 +443,19 @@ async function route(request: Request): Promise<Response> {
               .select('user_id')
               .eq('id', printer.provider_id)
               .maybeSingle();
-            authorized = provider?.user_id === user.id;
+            isProvider = provider?.user_id === user.id;
           }
         }
-        if (!authorized) fail(403, 'FORBIDDEN', 'You cannot update this order');
+        if (!isOwner && !isProvider) fail(404, 'NOT_FOUND', 'Order not found');
+        if (
+          !isProvider &&
+          !(
+            status === 'CANCELLED' &&
+            ['PENDING_ACCEPTANCE', 'CONFIRMED'].includes(String(current.status))
+          )
+        ) {
+          fail(403, 'FORBIDDEN', 'Only the printer provider can change this order status');
+        }
         const { data: order, error } = await db
           .from('orders')
           .update({
@@ -729,28 +759,42 @@ async function route(request: Request): Promise<Response> {
 
   const uploadMatch = path === '/models/upload-url';
   if (method === 'POST' && uploadMatch) {
-    await requireUser(request);
+    const user = await requireUser(request);
     const body = await bodyOf(request);
-    const fileName = requireString(body.fileName, 'fileName');
-    const { data, error } = await db.storage.from('models').createSignedUploadUrl(fileName);
-    if (error) fail(400, 'UPLOAD_URL_ERROR', error.message);
-    return json({ url: data.signedUrl, token: data.token, path: data.path });
+    const fileName = requireString(body.fileName, 'fileName').slice(0, 200);
+    const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+    if (!MODEL_EXTENSIONS.includes(ext)) {
+      fail(400, 'VALIDATION_ERROR', 'File must be an STL, 3MF, or OBJ model');
+    }
+    if (typeof body.size === 'number' && body.size > MAX_MODEL_BYTES) {
+      fail(400, 'VALIDATION_ERROR', 'File is larger than 50 MB');
+    }
+    const id = crypto.randomUUID();
+    const { data, error } = await db.storage
+      .from(MODELS_BUCKET)
+      .createSignedUploadUrl(modelObjectPath(user.id, id));
+    if (error || !data) fail(500, 'UPLOAD_URL_ERROR', 'Could not create an upload link');
+    return json({ id, fileName, url: data.signedUrl, token: data.token, path: data.path });
   }
 
   const processMatch = /^\/models\/([^/]+)\/process$/.exec(path);
   if (method === 'POST' && processMatch) {
     const user = await requireUser(request);
     const id = decodeURIComponent(processMatch[1]);
+    if (!isUuid(id)) fail(404, 'NOT_FOUND', 'Model not found');
     const body = await bodyOf(request);
     if (!isMaterial(body.material)) fail(400, 'VALIDATION_ERROR', 'Invalid material');
-    const { data: file, error: downloadError } = await db.storage.from('models').download(id);
-    if (downloadError || !file) fail(400, 'PROCESS_MODEL_ERROR', 'File not found');
+    const { data: file, error: downloadError } = await db.storage
+      .from(MODELS_BUCKET)
+      .download(modelObjectPath(user.id, id));
+    if (downloadError || !file) fail(404, 'NOT_FOUND', 'Model not found');
+    if (file.size > MAX_MODEL_BYTES) fail(413, 'FILE_TOO_LARGE', 'File is larger than 50 MB');
     const dimensions = { x: 10, y: 10, z: 10 };
     const volume = 12.5;
     const { error } = await db.from('model_files').insert({
       id,
       user_id: user.id,
-      file_name: id,
+      file_name: typeof body.fileName === 'string' ? body.fileName.slice(0, 200) : id,
       material: body.material,
       volume_cm3: volume,
       dimensions,
