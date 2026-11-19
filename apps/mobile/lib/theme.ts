@@ -31,6 +31,24 @@ export const colors = {
   success: '#05FF00',
   queued: '#B7BCB7',
   printing: '#4066B5',
+  /** Hairline divider inside outlined cards (local prototype look). */
+  hairline: '#E6ECF8',
+  /** Ready-for-pickup pill. */
+  successSoft: '#E7F8EC',
+  successText: '#2F7D4F',
+} as const;
+
+/** Outlined-card look from the local prototype: white card, thin blue border, soft shadow. */
+export const outlined = {
+  backgroundColor: '#FFFFFF',
+  borderWidth: 1,
+  borderColor: '#AABCE2',
+  borderRadius: 10,
+  shadowColor: '#10131A',
+  shadowOpacity: 0.04,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 1,
 } as const;
 
 export const spacing = {

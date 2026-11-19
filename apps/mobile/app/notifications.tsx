@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Banner, Screen, Toggle } from '../components/ui';
+import { AppHeader, Banner, GroupLabel, Screen, Toggle } from '../components/ui';
 import { Icon, icons, type IconName } from '../components/icons';
 import { api } from '../lib/api';
 import { fonts } from '../lib/fonts';
-import { colors, radius } from '../lib/theme';
+import { colors, outlined, radius } from '../lib/theme';
 import type { NotificationSettings } from '../lib/types';
 
 const DEFAULT_SETTINGS: NotificationSettings = {
@@ -55,12 +55,12 @@ export default function NotificationsScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Notifications" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Notifications</Text>
 
         {error ? <Banner message={error} /> : null}
 
+        <GroupLabel>Print activity</GroupLabel>
         <View style={styles.card}>
           {ORDER_ROWS.map((row) => (
             <SettingToggleRow
@@ -74,6 +74,7 @@ export default function NotificationsScreen() {
           ))}
         </View>
 
+        <GroupLabel style={styles.groupGap}>Preferences</GroupLabel>
         <View style={styles.card}>
           {OTHER_ROWS.map((row) => (
             <SettingToggleRow
@@ -86,6 +87,9 @@ export default function NotificationsScreen() {
             />
           ))}
         </View>
+        <Text style={styles.footnote}>
+          Pickup alerts are always sent while you have an active order, even if order updates are turned off.
+        </Text>
       </ScrollView>
     </Screen>
   );
@@ -107,7 +111,7 @@ function SettingToggleRow({
   return (
     <View style={styles.row}>
       <View style={styles.iconWell}>
-        <Icon name={icon} size={18} color={colors.link} />
+        <Icon name={icon} size={18} color={colors.text} />
       </View>
       <View style={styles.copy}>
         <Text style={styles.label}>{label}</Text>
@@ -119,20 +123,14 @@ function SettingToggleRow({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32, gap: 16 },
-  title: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
+  content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 32, gap: 8 },
+  groupGap: { marginTop: 14 },
+  footnote: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, color: colors.muted, marginTop: 12 },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-  },
+  card: { ...outlined, paddingHorizontal: 14, paddingVertical: 6, gap: 0 },
   divider: { height: 1, backgroundColor: colors.surfaceSubtle },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   iconWell: {
     width: 32,
     height: 32,
@@ -142,6 +140,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   copy: { flex: 1, gap: 2 },
-  label: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  detail: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  label: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 17, color: colors.text },
+  detail: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
 });

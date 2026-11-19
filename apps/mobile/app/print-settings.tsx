@@ -6,7 +6,7 @@ import { Icon, icons } from '../components/icons';
 import { estimatePrice } from '../lib/api';
 import { formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
-import { colors, radius, shadow } from '../lib/theme';
+import { colors, outlined, radius } from '../lib/theme';
 import { MATERIALS, QUALITIES, type Material, type Quality } from '../lib/types';
 
 const COLORS = [
@@ -47,88 +47,111 @@ export default function PrintSettingsScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Print Settings" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageLabel}>Print Settings</Text>
-
-        <View style={styles.objectCard}>
-          <View style={styles.objectThumb}>
-            <Icon name={icons.box} size={48} color={colors.text} />
+        <View style={styles.fileCard}>
+          <View style={styles.thumb}>
+            <Icon name={icons.box} size={26} color={colors.accent} />
           </View>
-          <View style={styles.objectCopy}>
-            <Text style={styles.objectName} numberOfLines={1}>{params.fileName ?? 'Example Object'}</Text>
-            <Text style={styles.objectMeta}>Size: 85x 60 x45 mm{'\n'}Volume: 28.5cm³</Text>
+          <View style={styles.fileBody}>
+            <Text style={styles.fileName} numberOfLines={1}>
+              {(params.fileName ?? 'Example Object').replace(/\.(stl|3mf|obj)$/i, '')}
+            </Text>
+            <Text style={styles.fileMeta}>Size: 85 × 60 × 45 mm{'\n'}Volume: 28.5 cm³</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>Material</Text>
-        <View style={styles.materialRow}>
-          {MATERIALS.map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => setMaterial(option)}
-              style={({ pressed }) => [styles.materialTile, material === option && styles.tileActive, pressed && styles.pressed]}
-            >
-              <Text style={[styles.materialName, material === option && styles.tileTextActive]}>{option}</Text>
-              <Text style={[styles.materialRate, material === option && styles.tileTextActive]}>{MATERIAL_RATES[option]}</Text>
-            </Pressable>
-          ))}
+        <Text style={styles.section}>Material</Text>
+        <View style={styles.row}>
+          {MATERIALS.map((option) => {
+            const selected = material === option;
+            return (
+              <Pressable
+                key={option}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setMaterial(option)}
+                style={({ pressed }) => [styles.material, selected && styles.materialSelected, pressed && styles.pressed]}
+              >
+                <Text style={[styles.materialName, selected && styles.onPrimary]}>{option}</Text>
+                <Text style={[styles.materialRate, selected && styles.onPrimarySoft]}>{MATERIAL_RATES[option]}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        <Text style={styles.sectionLabel}>Color</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
-          {COLORS.map((option) => (
-            <Pressable
-              key={option.name}
-              accessibilityLabel={option.name}
-              onPress={() => setColor(option.name)}
-              style={[
-                styles.swatch,
-                { backgroundColor: option.hex, borderColor: color === option.name ? colors.accent : option.border },
-                color === option.name && styles.swatchSelected,
-              ]}
-            />
-          ))}
-        </ScrollView>
+        <Text style={styles.section}>Color</Text>
+        <View style={styles.colorRow}>
+          {COLORS.map((option) => {
+            const selected = color === option.name;
+            const light = option.name === 'White';
+            return (
+              <Pressable
+                key={option.name}
+                accessibilityRole="button"
+                accessibilityLabel={option.name}
+                accessibilityState={{ selected }}
+                onPress={() => setColor(option.name)}
+                style={[styles.swatchRing, selected && styles.swatchRingOn]}
+              >
+                <View style={[styles.swatch, { backgroundColor: option.hex }, light && styles.swatchWhite]}>
+                  {selected ? <Icon name={icons.check} size={14} color={light ? colors.text : '#FFFFFF'} /> : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.selectedColor}>{color}</Text>
 
-        <Text style={styles.sectionLabel}>Quality</Text>
-        <View style={styles.qualityRow}>
-          {QUALITIES.map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => setQuality(option)}
-              style={({ pressed }) => [styles.qualityTile, quality === option && styles.tileActive, pressed && styles.pressed]}
-            >
-              <Text style={[styles.qualityName, quality === option && styles.tileTextActive]}>{QUALITY_COPY[option].title}</Text>
-              <Text style={[styles.qualityLayers, quality === option && styles.tileTextActive]}>{QUALITY_COPY[option].layers}</Text>
-            </Pressable>
-          ))}
+        <Text style={styles.section}>Quality</Text>
+        <View style={styles.row}>
+          {QUALITIES.map((option) => {
+            const selected = quality === option;
+            return (
+              <Pressable
+                key={option}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setQuality(option)}
+                style={({ pressed }) => [styles.quality, selected && styles.qualitySelected, pressed && styles.pressed]}
+              >
+                <Text style={[styles.qualityName, selected && styles.qualitySelectedText]}>{QUALITY_COPY[option].title}</Text>
+                <Text style={[styles.qualityLayer, selected && styles.qualitySelectedText]}>{QUALITY_COPY[option].layers}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        <Text style={styles.sectionLabel}>Quantity</Text>
-        <View style={styles.quantityRow}>
-          <Pressable onPress={() => setQuantity((q) => Math.max(1, q - 1))} style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}>
-            <Icon name={icons.minus} size={20} color={colors.text} />
+        <Text style={styles.section}>Quantity</Text>
+        <View style={styles.stepper}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Decrease quantity"
+            onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+            style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}
+          >
+            <Icon name={icons.minus} size={18} color={colors.text} />
           </Pressable>
-          <Text style={styles.quantityValue}>{quantity}</Text>
-          <Pressable onPress={() => setQuantity((q) => q + 1)} style={({ pressed }) => [styles.stepButton, styles.stepButtonActive, pressed && styles.pressed]}>
-            <Icon name={icons.plus} size={20} color="#FFFFFF" />
+          <Text style={styles.qty}>{quantity}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Increase quantity"
+            onPress={() => setQuantity((q) => Math.min(20, q + 1))}
+            style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}
+          >
+            <Icon name={icons.plus} size={18} color={colors.text} />
           </Pressable>
+          <Text style={styles.stepHint}>× {MATERIAL_RATES[material].replace('/cm³', '')} per cm³</Text>
         </View>
 
         <View style={styles.priceCard}>
           <Text style={styles.priceLabel}>Estimated Price</Text>
-          <Text style={styles.priceValue}>{formatMoney(estimated)}</Text>
+          <Text style={styles.price}>{formatMoney(estimated)}</Text>
+          <Text style={styles.priceNote}>Final quote comes from the printer you choose.</Text>
         </View>
 
-        <View style={{ height: 110 }} />
-      </ScrollView>
-
-      <View style={styles.bottomBar}>
         <Button
           title="Find Nearby Printers"
-          size="sm"
-          labelSize="md"
           onPress={() =>
             router.push({
               pathname: '/printers' as never,
@@ -144,59 +167,50 @@ export default function PrintSettingsScreen() {
             })
           }
         />
-      </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24, gap: 12 },
+  content: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 32 },
   pressed: { opacity: 0.85 },
-  pageLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  sectionLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 4 },
+  section: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 24, marginBottom: 10 },
 
-  objectCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 13 },
-  objectThumb: { width: 95, height: 88, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
-  objectCopy: { flex: 1, gap: 8 },
-  objectName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  objectMeta: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.text },
+  fileCard: { ...outlined, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
+  thumb: { width: 62, height: 62, borderRadius: radius.sm, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' },
+  fileBody: { flex: 1, gap: 4 },
+  fileName: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  fileMeta: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, color: colors.muted },
 
-  materialRow: { flexDirection: 'row', gap: 8 },
-  materialTile: { flex: 1, height: 74, borderRadius: radius.md, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  row: { flexDirection: 'row', gap: 8 },
+  material: { flex: 1, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg, paddingVertical: 12, alignItems: 'center', gap: 4 },
+  materialSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   materialName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  materialRate: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  materialRate: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
+  onPrimary: { color: '#FFFFFF' },
+  onPrimarySoft: { color: 'rgba(255,255,255,0.85)' },
 
-  colorRow: { gap: 8, paddingVertical: 2 },
-  swatch: { width: 46, height: 46, borderRadius: radius.pill, borderWidth: 3 },
-  swatchSelected: { borderWidth: 3 },
+  colorRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  swatchRing: { width: 40, height: 40, borderRadius: radius.pill, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  swatchRingOn: { borderColor: colors.accent },
+  swatch: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  swatchWhite: { borderWidth: 1, borderColor: colors.border },
+  selectedColor: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.muted, marginTop: 8 },
 
-  qualityRow: { flexDirection: 'row', gap: 13 },
-  qualityTile: { flex: 1, height: 71, borderRadius: radius.md, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  qualityName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  qualityLayers: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  quality: { flex: 1, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, paddingVertical: 12, alignItems: 'center', gap: 4 },
+  qualitySelected: { backgroundColor: colors.surfaceSubtle, borderColor: colors.accent },
+  qualityName: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 18, color: colors.text },
+  qualityLayer: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
+  qualitySelectedText: { color: colors.link },
 
-  tileActive: { backgroundColor: colors.accent },
-  tileTextActive: { color: '#FFFFFF' },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, padding: 8 },
+  stepButton: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' },
+  qty: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, minWidth: 26, textAlign: 'center' },
+  stepHint: { marginLeft: 'auto', fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted, paddingRight: 4 },
 
-  quantityRow: { height: 45, borderRadius: radius.sm, backgroundColor: colors.accentSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 9 },
-  stepButton: { width: 42, height: 32, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
-  stepButtonActive: { backgroundColor: colors.accent },
-  quantityValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-
-  priceCard: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 12, gap: 6, minHeight: 116 },
-  priceLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  priceValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-
-  bottomBar: {
-    position: 'absolute',
-    left: 15,
-    right: 15,
-    bottom: 20,
-    height: 84,
-    borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 17,
-  },
+  priceCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 16, marginTop: 24, marginBottom: 14 },
+  priceLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  price: { fontFamily: fonts.bold, fontSize: 26, lineHeight: 31, color: colors.text, marginTop: 2 },
+  priceNote: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.muted, marginTop: 2 },
 });

@@ -31,7 +31,7 @@ export default function CheckYourEmailScreen() {
       <AppHeader />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.mark}>
-          <Icon name={icons.mail} size={20} color={colors.muted} />
+          <Icon name={icons.mail} size={30} color={colors.accent} />
         </View>
         <Text style={styles.title}>Check your email</Text>
         <Text style={styles.description}>
@@ -59,10 +59,10 @@ export default function CheckYourEmailScreen() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 28, gap: 24, alignItems: 'center' },
   mark: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },

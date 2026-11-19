@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Radio, Screen } from '../components/ui';
+import { AppHeader, Button, Screen } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { api, estimatePrice } from '../lib/api';
 import { formatDate, formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
-import { colors, radius, shadow } from '../lib/theme';
+import { colors, outlined, radius } from '../lib/theme';
 import type { Material, Quality } from '../lib/types';
 
 const SERVICE_FEE = 2;
@@ -27,6 +27,7 @@ export default function CheckoutScreen() {
   }>();
   const router = useRouter();
   const [printerName, setPrinterName] = useState('Your selected provider');
+  const [printerPlace, setPrinterPlace] = useState<string | null>(null);
   const [priceFactor, setPriceFactor] = useState(1);
   const [payment, setPayment] = useState<PaymentMethod>('PROMPTPAY');
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,7 @@ export default function CheckoutScreen() {
     api.getPrinter(params.printerId)
       .then((result) => {
         setPrinterName(result.printer.name);
+        setPrinterPlace(result.printer.location_details);
         setPriceFactor(Number(result.printer.price_factor) || 1);
       })
       .catch(() => undefined);
@@ -88,29 +90,30 @@ export default function CheckoutScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Checkout" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Checkout</Text>
-
         <View style={styles.card}>
-          <View style={styles.fileRow}>
-            <Icon name={icons.box} size={26} color={colors.text} />
-            <Text style={styles.fileName} numberOfLines={1}>{params.fileName || printerName}</Text>
-          </View>
+          <Text style={styles.fileName} numberOfLines={1}>
+            {(params.fileName || 'Your model').replace(/\.(stl|3mf|obj)$/i, '')}
+          </Text>
+          <Text style={styles.provider}>
+            {printerName}
+            {printerPlace ? ` · ${printerPlace}` : ''}
+          </Text>
+          <View style={styles.dividerTop} />
           <Row label="Material" value={material} />
           <Row label="Color" value={params.color ?? 'White'} />
           <Row label="Quality" value={QUALITY_LABELS[quality]} />
-          <Row label="Quantity" value={String(quantity)} />
+          <Row label="Quantity" value={String(quantity)} last />
         </View>
 
-        <View style={styles.priceCard}>
+        <View style={styles.card}>
           <Row label="Print cost" value={formatMoney(printCost)} />
           <Row label="Service fee" value={formatMoney(SERVICE_FEE)} />
-          <Row label="Total" value={formatMoney(total)} emphasis />
+          <Row label="Total" value={formatMoney(total)} emphasis last />
         </View>
 
         <Text style={styles.section}>Payment</Text>
-
         <View style={styles.card}>
           <Pressable
             accessibilityRole="radio"
@@ -118,38 +121,38 @@ export default function CheckoutScreen() {
             onPress={() => setPayment('PROMPTPAY')}
             style={styles.paymentRow}
           >
-            <View style={styles.paymentLeft}>
-              <Radio selected={payment === 'PROMPTPAY'} onPress={() => setPayment('PROMPTPAY')} />
-              <Text style={styles.paymentTitle}>Campus card</Text>
+            <View style={styles.cardIcon}>
+              <Icon name={icons.card} size={18} color={colors.accent} />
             </View>
-            <Text style={styles.paymentHint}>•••• 4021</Text>
+            <View style={styles.paymentBody}>
+              <Text style={styles.paymentTitle}>Campus card</Text>
+              <Text style={styles.paymentMeta}>•••• 4021</Text>
+            </View>
+            <View style={[styles.radio, payment !== 'PROMPTPAY' && styles.radioOff]}>
+              {payment === 'PROMPTPAY' ? <Icon name={icons.check} size={12} color="#FFFFFF" /> : null}
+            </View>
           </Pressable>
-          <View style={styles.divider} />
           <Pressable
             accessibilityRole="button"
             onPress={() => Alert.alert('Add payment method', 'Card management is handled by your campus account.')}
-            style={styles.paymentRow}
+            style={styles.addPayment}
           >
-            <View style={styles.paymentLeft}>
-              <Radio selected={false} />
-              <Text style={styles.paymentLink}>Add payment method</Text>
-            </View>
+            <Text style={styles.addPaymentText}>+ Add payment method</Text>
           </Pressable>
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Button title="Place order" loading={busy} onPress={() => void place()} />
+        <Button title="Place order" loading={busy} onPress={() => void place()} style={styles.placeButton} />
         <Text style={styles.terms}>By placing your order you agree to Forge’s Terms of Service.</Text>
-        <View style={{ height: 24 }} />
       </ScrollView>
     </Screen>
   );
 }
 
-function Row({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+function Row({ label, value, emphasis = false, last = false }: { label: string; value: string; emphasis?: boolean; last?: boolean }) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, !last && styles.rowDivider]}>
       <Text style={emphasis ? styles.rowLabelStrong : styles.rowLabel}>{label}</Text>
       <Text style={emphasis ? styles.rowValueStrong : styles.rowValue}>{value}</Text>
     </View>
@@ -157,42 +160,32 @@ function Row({ label, value, emphasis = false }: { label: string; value: string;
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
-  title: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  section: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  content: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 32, gap: 14 },
+  section: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 10, marginBottom: -4 },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-  },
-  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  fileName: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  card: { ...outlined, padding: 16 },
+  fileName: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  provider: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.muted, marginTop: 4 },
+  dividerTop: { height: 1, backgroundColor: colors.hairline, marginTop: 14 },
 
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, gap: 12 },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.hairline },
   rowLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  rowValue: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  rowLabelStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  rowValue: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.text, flexShrink: 1, textAlign: 'right' },
+  rowLabelStrong: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
   rowValueStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
 
-  priceCard: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-    ...shadow.card,
-  },
-
-  paymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 20 },
-  paymentLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  paymentTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  paymentLink: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
-  paymentHint: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  divider: { height: 1, backgroundColor: colors.surfaceSubtle },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardIcon: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' },
+  paymentBody: { flex: 1, gap: 2 },
+  paymentTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 18, color: colors.text },
+  paymentMeta: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.muted },
+  radio: { width: 20, height: 20, borderRadius: radius.pill, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  radioOff: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
+  addPayment: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.hairline },
+  addPaymentText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
 
   error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.danger },
+  placeButton: { marginTop: 10 },
   terms: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted, textAlign: 'center' },
 });

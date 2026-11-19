@@ -17,7 +17,7 @@ export default function SignUpSuccessScreen() {
     <Screen>
       <View style={styles.content}>
         <View style={styles.badge}>
-          <Icon name={icons.check} size={44} color={colors.accent} />
+          <Icon name={icons.check} size={44} color="#FFFFFF" />
         </View>
 
         <View style={styles.copy}>
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: radius.pill,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },

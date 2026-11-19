@@ -124,7 +124,7 @@ export function AuthFooterLink({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 28, gap: 24, flexGrow: 1 },
+  content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 28, gap: 24, flexGrow: 1 },
   intro: { gap: 8 },
   terms: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.muted, textAlign: 'center' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },

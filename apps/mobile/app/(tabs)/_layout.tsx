@@ -38,11 +38,10 @@ function ForgeTabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
                 navigateToTab(route.key);
               }
             }}
-            style={styles.item}
+            style={({ pressed }) => [styles.item, focused && styles.itemActive, pressed && styles.pressed]}
           >
-            <Icon name={tab.icon} size={26} color={focused ? colors.link : colors.text} />
+            <Icon name={tab.icon} size={20} color={focused ? colors.accent : colors.text} />
             <Text style={[styles.label, focused && styles.labelActive]}>{tab.label}</Text>
-            <View style={[styles.indicator, focused && styles.indicatorActive]} />
           </Pressable>
         );
       })}
@@ -59,7 +58,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
       <Tabs.Screen name="orders" options={{ title: 'Orders' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
-      <Tabs.Screen name="provider" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -74,12 +72,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentSoft,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 9,
+    gap: 6,
   },
-  item: { flex: 1, height: 52, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  label: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.text },
-  labelActive: { fontFamily: fonts.bold, color: colors.link },
-  indicator: { width: 22, height: 3, borderRadius: radius.pill, backgroundColor: 'transparent' },
-  indicatorActive: { backgroundColor: colors.accent },
+  item: { flex: 1, height: 52, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  itemActive: { backgroundColor: colors.bg },
+  pressed: { opacity: 0.7 },
+  label: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.text },
+  labelActive: { fontFamily: fonts.semibold, color: colors.accent },
 });

@@ -1,12 +1,12 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, ErrorView, LoadingView, Screen, SettingRow } from '../../components/ui';
+import { AppHeader, ErrorView, LoadingView, Screen, SettingRow } from '../../components/ui';
 import { icons, type IconName } from '../../components/icons';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { fonts } from '../../lib/fonts';
-import { colors, radius, shadow } from '../../lib/theme';
+import { colors, outlined, radius } from '../../lib/theme';
 import type { Profile, ProfileStats } from '../../lib/types';
 
 export default function ProfileScreen() {
@@ -51,7 +51,7 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Profile</Text>
-          <Pressable onPress={() => router.push('/edit-profile')} style={({ pressed }) => [styles.editPill, pressed && styles.pressed]}>
+          <Pressable onPress={() => router.push('/edit-profile')} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
             <Text style={styles.editPillText}>Edit profile</Text>
           </Pressable>
         </View>
@@ -87,21 +87,21 @@ export default function ProfileScreen() {
           title="Help"
           rows={[
             { icon: icons.help, title: 'Support', detail: 'Help center and contact Forge', to: '/help' },
-            { icon: icons.logout, title: 'Log out', detail: undefined, danger: true, onPress: () => void signOut() },
+            { icon: icons.logout, title: 'Log out', detail: 'Sign out of this device', danger: true, onPress: () => void signOut() },
           ]}
         />
 
-        <View style={styles.maker}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/provider')}
+          style={({ pressed }) => [styles.maker, pressed && styles.pressed]}
+        >
           <Text style={styles.makerTitle}>Maker mode</Text>
           <Text style={styles.makerCopy}>List your printer and earn from print jobs nearby.</Text>
-          <Button
-            title="Become a provider"
-            size="sm"
-            labelSize="md"
-            onPress={() => router.push('/provider')}
-            style={styles.makerButton}
-          />
-        </View>
+          <View style={styles.makerButton}>
+            <Text style={styles.makerButtonText}>{profile.provider ? 'Open provider dashboard' : 'Become a provider'}</Text>
+          </View>
+        </Pressable>
 
         <View style={{ height: 110 }} />
       </ScrollView>
@@ -142,51 +142,37 @@ function Section({ title, rows }: { title: string; rows: Row[] }) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, gap: 12 },
-  pressed: { opacity: 0.85 },
+  content: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 16 },
+  pressed: { opacity: 0.75 },
 
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 29, color: colors.text },
-  editPill: { backgroundColor: colors.surfaceSubtle, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 7 },
-  editPillText: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  title: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 29, letterSpacing: -0.3, color: colors.text },
+  editPillText: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 15.7, color: colors.accent },
 
-  summary: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    ...shadow.card,
-  },
-  avatar: { width: 58, height: 58, borderRadius: radius.pill, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
-  initials: { fontFamily: fonts.extrabold, fontSize: 20, lineHeight: 24.2, color: colors.text },
-  summaryCopy: { flex: 1, gap: 3 },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingBottom: 4 },
+  avatar: { width: 62, height: 62, borderRadius: radius.pill, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  initials: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24.2, color: colors.text },
+  summaryCopy: { flex: 1, gap: 2 },
   name: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
   email: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  plan: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 13.3, color: colors.link },
+  plan: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 13.3, color: colors.link, marginTop: 2 },
 
-  section: { gap: 6 },
-  sectionTitle: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 2,
+  section: { marginTop: 22 },
+  sectionTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    lineHeight: 15.7,
+    color: colors.muted,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  rowDivider: { height: 1, backgroundColor: colors.surfaceSubtle },
+  sectionCard: { ...outlined, paddingHorizontal: 14, paddingVertical: 4, overflow: 'hidden' },
+  rowDivider: { height: 1, backgroundColor: '#EEF1F7' },
 
-  maker: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 8,
-  },
+  maker: { marginTop: 22, borderRadius: radius.md, backgroundColor: colors.accentSoft, padding: 18, gap: 4 },
   makerTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  makerCopy: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  makerButton: { alignSelf: 'flex-start', marginTop: 4, paddingHorizontal: 24 },
+  makerCopy: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text, opacity: 0.8 },
+  makerButton: { marginTop: 12, alignSelf: 'flex-start', backgroundColor: colors.bg, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 9 },
+  makerButtonText: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 17, color: colors.link },
 });

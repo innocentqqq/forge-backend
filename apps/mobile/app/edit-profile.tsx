@@ -5,7 +5,7 @@ import { AppHeader, Banner, Button, LoadingView, Screen, TextField } from '../co
 import { Icon, icons } from '../components/icons';
 import { api } from '../lib/api';
 import { fonts } from '../lib/fonts';
-import { colors, radius } from '../lib/theme';
+import { colors, outlined, radius } from '../lib/theme';
 import type { Profile } from '../lib/types';
 
 export default function EditProfileScreen() {
@@ -43,7 +43,7 @@ export default function EditProfileScreen() {
   if (loading) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back title="Edit profile" />
         <LoadingView label="Loading profile…" />
       </Screen>
     );
@@ -59,9 +59,8 @@ export default function EditProfileScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Edit profile" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Edit profile</Text>
 
         <View style={styles.account}>
           <View style={styles.avatar}>
@@ -112,38 +111,27 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32, gap: 16 },
+  content: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 32, gap: 16 },
   pressed: { opacity: 0.85 },
-  title: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
 
   account: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 58,
     height: 58,
     borderRadius: radius.pill,
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initials: { fontFamily: fonts.extrabold, fontSize: 20, lineHeight: 24.2, color: colors.text },
+  initials: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24.2, color: colors.text },
   accountCopy: { flex: 1, gap: 2 },
   name: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
   email: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-  },
+  card: { ...outlined, padding: 16, gap: 14 },
 
   university: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    ...outlined,
     padding: 14,
     flexDirection: 'row',
     alignItems: 'center',

@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon, icons, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
-import { colors, layout, radius, shadow, spacing } from '../lib/theme';
+import { colors, layout, outlined, radius, shadow, spacing } from '../lib/theme';
 
 const logo = require('../assets/forge-logo.png');
 
@@ -91,21 +91,48 @@ export function Divider({ tone = 'subtle' }: { tone?: 'subtle' | 'border' }) {
 
 /* ------------------------------------------------------------------ header */
 
-export function AppHeader({ back = false, compact = false }: { back?: boolean; compact?: boolean }) {
+/**
+ * Local-prototype header.
+ * - Brand row: small Forge logo tile + "Forge" wordmark on the left, optional `right`.
+ * - Back row (`back`): chevron + optional `title` on one compact line, optional `right`.
+ */
+export function AppHeader({
+  back = false,
+  compact = false,
+  title,
+  right,
+  onBack,
+}: {
+  back?: boolean;
+  compact?: boolean;
+  title?: string;
+  right?: React.ReactNode;
+  onBack?: () => void;
+}) {
   const router = useRouter();
+  const goBack = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/')));
+  if (back) {
+    return (
+      <View style={styles.backHeader}>
+        <BackButton onPress={goBack} />
+        {title ? (
+          <Text style={styles.backTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        ) : null}
+        <View style={styles.headerRight}>{right}</View>
+      </View>
+    );
+  }
   return (
     <View style={[styles.header, compact && styles.headerCompact]}>
-      {back ? (
-        <BackButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-      ) : (
-        <Image
-          source={logo}
-          style={compact ? styles.logoCompact : styles.logo}
-          resizeMode="contain"
-          accessibilityLabel="Forge logo"
-        />
-      )}
-      <Text style={styles.brand}>Forge</Text>
+      <View style={styles.brandRow}>
+        <View style={styles.logoTile}>
+          <Image source={logo} style={styles.logo} resizeMode="contain" accessibilityLabel="Forge logo" />
+        </View>
+        <Text style={styles.brand}>Forge</Text>
+      </View>
+      <View style={styles.headerRight}>{right}</View>
     </View>
   );
 }
@@ -118,9 +145,14 @@ export function BackButton({ onPress }: { onPress?: () => void }) {
       onPress={onPress}
       style={({ pressed }) => [styles.back, pressed && styles.pressed]}
     >
-      <Icon name={icons.chevronBack} size={24} color={colors.text} />
+      <Icon name={icons.chevronBack} size={22} color={colors.text} />
     </Pressable>
   );
+}
+
+/** Small uppercase group label used above settings lists ("ACCOUNT", "PRINT ACTIVITY"). */
+export function GroupLabel({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <Text style={[styles.groupLabel, style]}>{children}</Text>;
 }
 
 /* -------------------------------------------------------------------- type */
@@ -350,17 +382,27 @@ export function Chip({
   label,
   active,
   onPress,
+  compact,
+  style,
 }: {
   label: string;
   active?: boolean;
   onPress: () => void;
+  compact?: boolean;
+  style?: ViewStyle;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      style={({ pressed }) => [styles.chip, active ? styles.chipActive : styles.chipIdle, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.chip,
+        compact && styles.chipCompact,
+        active ? styles.chipActive : styles.chipIdle,
+        style,
+        pressed && styles.pressed,
+      ]}
     >
       <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
@@ -408,18 +450,19 @@ export function Radio({ selected, onPress }: { selected: boolean; onPress?: () =
 
 type StatusTone = 'active' | 'queued' | 'done' | 'info';
 
-const dotColors: Record<StatusTone, string> = {
-  active: colors.printing,
-  queued: colors.queued,
-  done: colors.success,
-  info: colors.link,
+/** Local-prototype status pill: tinted background + coloured label, no dot. */
+const pillColors: Record<StatusTone, { bg: string; fg: string }> = {
+  active: { bg: '#E8EDFB', fg: colors.printing },
+  queued: { bg: colors.surfaceSubtle, fg: colors.link },
+  done: { bg: colors.successSoft, fg: colors.successText },
+  info: { bg: colors.surfaceSubtle, fg: colors.link },
 };
 
 export function StatusPill({ label, tone = 'active' }: { label: string; tone?: StatusTone }) {
+  const c = pillColors[tone];
   return (
-    <View style={styles.status}>
-      <View style={[styles.statusDot, { backgroundColor: dotColors[tone] }]} />
-      <Text style={styles.statusText}>{label}</Text>
+    <View style={[styles.status, { backgroundColor: c.bg }]}>
+      <Text style={[styles.statusText, { color: c.fg }]}>{label}</Text>
     </View>
   );
 }
@@ -450,7 +493,7 @@ export function Badge({ label, tone = 'neutral' }: { label: string; tone?: Badge
   );
 }
 
-export function ProgressBar({ value, height = 6 }: { value: number; height?: number }) {
+export function ProgressBar({ value, height = 8 }: { value: number; height?: number }) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
     <View style={[styles.progressTrack, { height }]}>
@@ -479,7 +522,7 @@ export function SettingRow({
       style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}
     >
       <View style={[styles.iconWell, danger && styles.iconWellDanger]}>
-        <Icon name={icon} size={18} color={danger ? colors.danger : colors.link} />
+        <Icon name={icon} size={18} color={danger ? colors.danger : colors.text} />
       </View>
       <View style={styles.settingCopy}>
         <Text style={[styles.settingTitle, danger && { color: colors.danger }]}>{title}</Text>
@@ -547,20 +590,47 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
 
   header: {
-    height: layout.headerHeight,
-    paddingTop: 24,
-    paddingBottom: 10,
-    paddingLeft: 20,
-    paddingRight: 24,
+    minHeight: 52,
+    paddingTop: 18,
+    paddingBottom: 12,
+    paddingHorizontal: layout.gutter,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerCompact: { height: 88, paddingTop: 18 },
-  logo: { width: 69, height: 70 },
-  logoCompact: { width: 58, height: 59 },
-  brand: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  back: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  headerCompact: { paddingBottom: 4 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logo: { width: 34, height: 34 },
+  brand: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, letterSpacing: -0.4, color: colors.text },
+  headerRight: { marginLeft: 'auto' },
+  backHeader: {
+    minHeight: 44,
+    paddingTop: 14,
+    paddingBottom: 6,
+    paddingHorizontal: layout.gutter,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backTitle: { flexShrink: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  back: { width: 34, height: 34, marginLeft: -8, alignItems: 'center', justifyContent: 'center' },
+  groupLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    lineHeight: 13.3,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.muted,
+  },
 
   heroTitle: { fontFamily: fonts.bold, fontSize: 32, lineHeight: 38.7, color: colors.text },
   pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
@@ -575,24 +645,22 @@ const styles = StyleSheet.create({
   centerText: { textAlign: 'center' },
 
   card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
+    ...outlined,
+    padding: 16,
     gap: 10,
   },
   cardSoft: {
     backgroundColor: colors.accentSoft,
     borderWidth: 0,
-    ...shadow.card,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  cardPlain: { borderWidth: 0, padding: 0 },
+  cardPlain: { borderWidth: 0, padding: 0, shadowOpacity: 0, elevation: 0, backgroundColor: 'transparent' },
 
+  /** Auth form container: white outlined card (local prototype). */
   panel: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 20,
+    ...outlined,
+    padding: 16,
     gap: 16,
   },
 
@@ -629,16 +697,17 @@ const styles = StyleSheet.create({
   filledLabel: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
   filledInput: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23.2, color: colors.text, padding: 0 },
 
-  chip: { height: 30, paddingHorizontal: 12, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  chipIdle: { backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
-  chipActive: { backgroundColor: colors.accent },
-  chipText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  chipTextActive: { color: '#FFFFFF' },
+  chip: { height: 40, paddingHorizontal: 16, borderRadius: radius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  chipCompact: { height: 30, paddingHorizontal: 12 },
+  chipIdle: { backgroundColor: '#FFFFFF', borderColor: colors.border },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  chipTextActive: { color: '#FFFFFF', fontFamily: fonts.semibold },
 
-  toggle: { width: 44, height: 26, borderRadius: radius.pill, padding: 2, justifyContent: 'center' },
+  toggle: { width: 46, height: 27, borderRadius: radius.pill, padding: 3, justifyContent: 'center' },
   toggleOn: { backgroundColor: colors.accent, alignItems: 'flex-end' },
   toggleOff: { backgroundColor: colors.track, alignItems: 'flex-start' },
-  knob: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: '#FFFFFF' },
+  knob: { width: 21, height: 21, borderRadius: radius.pill, backgroundColor: '#FFFFFF' },
   knobOn: {},
   knobOff: {},
 
@@ -657,26 +726,23 @@ const styles = StyleSheet.create({
   status: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceSubtle,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
     alignSelf: 'flex-start',
   },
-  statusDot: { width: 8, height: 8, borderRadius: radius.pill },
-  statusText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  statusText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 13.3 },
 
   badge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
   badgeText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 13.3 },
 
   progressTrack: { borderRadius: radius.pill, backgroundColor: colors.track, overflow: 'hidden', width: '100%' },
-  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
+  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.printing },
 
-  settingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  settingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 10 },
   iconWell: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceSubtle,
     alignItems: 'center',

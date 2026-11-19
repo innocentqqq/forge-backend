@@ -3,7 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { AppHeader, Button, Screen } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { fonts } from '../lib/fonts';
-import { colors, radius } from '../lib/theme';
+import { colors, outlined, radius } from '../lib/theme';
 
 const FAQS = [
   {
@@ -33,9 +33,8 @@ export default function HelpScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Help & FAQ" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Help &amp; FAQ</Text>
 
         {FAQS.map((item, index) => {
           const expanded = open === index;
@@ -49,9 +48,7 @@ export default function HelpScreen() {
             >
               <View style={styles.questionRow}>
                 <Text style={styles.question}>{item.question}</Text>
-                <View style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}>
-                  <Icon name={icons.chevronRight} size={16} color={colors.muted} />
-                </View>
+                <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.muted} />
               </View>
               {expanded ? <Text style={styles.answer}>{item.answer}</Text> : null}
             </Pressable>
@@ -59,6 +56,7 @@ export default function HelpScreen() {
         })}
 
         <View style={styles.support}>
+          <Icon name={icons.help} size={22} color={colors.text} />
           <Text style={styles.supportTitle}>Still need help?</Text>
           <Text style={styles.supportCopy}>Our support team usually replies within a day.</Text>
           <Button
@@ -72,30 +70,15 @@ export default function HelpScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32, gap: 16 },
+  content: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 32, gap: 12 },
   pressed: { opacity: 0.85 },
-  title: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
 
-  item: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-  },
+  item: { ...outlined, padding: 14, gap: 10 },
   questionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   question: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
   answer: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
 
-  support: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 10,
-  },
+  support: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 18, gap: 8, marginTop: 12 },
   supportTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
   supportCopy: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
 });

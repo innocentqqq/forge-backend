@@ -1,11 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Banner, Button, ProgressBar, Screen } from '../../components/ui';
+import { AppHeader, Banner, Button, ProgressBar, Screen, StatusPill } from '../../components/ui';
+import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
 import { formatMoney } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
-import { colors, radius } from '../../lib/theme';
+import { colors, outlined, radius } from '../../lib/theme';
 import type { OrderStatus } from '../../lib/types';
 
 const STEPS = ['Confirmed', 'In queue', 'Printing', 'Ready for pickup'];
@@ -80,10 +81,12 @@ export default function ProviderOrderScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Update order" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Update order</Text>
-        <Text style={styles.subtitle}>Order #{params.orderNumber ?? '—'}</Text>
+        <Text style={styles.lead}>
+          Order #{params.orderNumber ?? '—'}
+          {params.pickup ? ` · ${params.pickup}` : ''}
+        </Text>
 
         <View style={styles.card}>
           <View style={styles.summaryTop}>
@@ -93,53 +96,44 @@ export default function ProviderOrderScreen() {
           <Text style={styles.meta}>
             {params.material ?? 'PLA'} · {params.quality ?? '0.15 mm'} · Qty {params.quantity ?? '1'}
           </Text>
-          <View style={styles.divider} />
           <Text style={styles.meta}>Pickup · {params.pickup ?? 'Pickup details in order'}</Text>
         </View>
 
-        <View style={styles.statusHeader}>
+        <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Status</Text>
-          <Text style={styles.progressValue}>{progress}%</Text>
+          <StatusPill
+            label={STEPS[current] ?? status}
+            tone={status === 'PRINTING' ? 'active' : status === 'READY_FOR_PICKUP' ? 'done' : 'queued'}
+          />
         </View>
-        <ProgressBar value={progress} height={6} />
-
-        <View style={styles.timeline}>
-          {STEPS.map((label, index) => {
-            const done = current > index;
-            const active = current === index;
-            return (
-              <View key={label} style={styles.step}>
-                <View style={styles.rail}>
-                  <View
-                    style={[
-                      styles.dot,
-                      done && styles.dotDone,
-                      active && styles.dotActive,
-                      !done && !active && styles.dotPending,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dotLabel,
-                        done && styles.dotLabelDone,
-                        active && styles.dotLabelActive,
-                        !done && !active && styles.dotLabelPending,
-                      ]}
-                    >
-                      {index + 1}
+        <View style={styles.card}>
+          <View style={styles.progressTop}>
+            <Text style={styles.progressLabel}>Job progress</Text>
+            <Text style={styles.progressPct}>{progress}%</Text>
+          </View>
+          <ProgressBar value={progress} />
+          <View style={styles.timeline}>
+            {STEPS.map((label, index) => {
+              const done = current > index || status === 'READY_FOR_PICKUP';
+              const active = current === index && status !== 'READY_FOR_PICKUP';
+              return (
+                <View key={label} style={styles.step}>
+                  <View style={styles.rail}>
+                    <View style={[styles.dot, done && styles.dotDone, active && styles.dotCurrent]}>
+                      {done ? <Icon name={icons.check} size={10} color="#FFFFFF" /> : null}
+                    </View>
+                    {index < STEPS.length - 1 ? <View style={[styles.line, done && styles.lineDone]} /> : null}
+                  </View>
+                  <View style={styles.stepBody}>
+                    <Text style={[styles.stepLabel, (done || active) && styles.stepLabelActive]}>{label}</Text>
+                    <Text style={styles.stepTime}>
+                      {done ? 'Completed' : active ? (label === 'Printing' ? `In progress · ${progress}%` : 'In progress') : 'Not started'}
                     </Text>
                   </View>
-                  {index < STEPS.length - 1 ? <View style={styles.connector} /> : null}
                 </View>
-                <View style={styles.stepCopy}>
-                  <Text style={[styles.stepTitle, (done || active) && styles.stepTitleActive]}>{label}</Text>
-                  <Text style={styles.stepDetail}>
-                    {done ? 'Completed' : active ? 'In progress' : 'Not started'}
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
         </View>
 
         {error ? <Banner message={error} /> : null}
@@ -149,66 +143,54 @@ export default function ProviderOrderScreen() {
           onPress={() => void advance()}
           loading={busy}
           disabled={!action}
+          style={styles.cta}
         />
 
         <Pressable
+          accessibilityRole="button"
           onPress={() => Alert.alert('Message customer', 'Customer messaging is coming soon.')}
-          hitSlop={8}
+          style={styles.message}
         >
-          <Text style={styles.link}>Message customer</Text>
+          <Icon name="chatbox-outline" size={16} color={colors.link} />
+          <Text style={styles.messageText}>Message customer</Text>
         </Pressable>
-        <Text style={styles.footnote}>Status changes are shared with the customer in real time.</Text>
+        <Text style={styles.note}>Status changes are shared with the customer in real time.</Text>
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 32, gap: 16 },
-  pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  subtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  sectionTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  progressValue: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  content: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 32 },
+  lead: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted, marginBottom: 14 },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 6,
-  },
+  card: { ...outlined, padding: 16 },
   summaryTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   summaryTitle: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
   summaryPrice: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  meta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: 6 },
+  meta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted, marginTop: 4 },
 
-  statusHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, marginBottom: 8 },
+  sectionTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
 
-  timeline: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-  },
-  step: { flexDirection: 'row', gap: 12 },
-  rail: { width: 24, alignItems: 'center' },
-  dot: { width: 24, height: 24, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  dotDone: { backgroundColor: colors.accent },
-  dotActive: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.accent },
-  dotPending: { backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
-  dotLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7 },
-  dotLabelDone: { color: '#FFFFFF' },
-  dotLabelActive: { color: colors.accent },
-  dotLabelPending: { color: colors.muted },
-  connector: { width: 2, flex: 1, minHeight: 34, backgroundColor: colors.border },
-  stepCopy: { flex: 1, paddingBottom: 18, gap: 2 },
-  stepTitle: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23.2, color: colors.muted },
-  stepTitleActive: { color: colors.text },
-  stepDetail: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
+  progressTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  progressPct: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  timeline: { marginTop: 12 },
+  step: { flexDirection: 'row', gap: 14 },
+  rail: { alignItems: 'center', width: 20 },
+  dot: { width: 18, height: 18, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  dotDone: { backgroundColor: colors.accent, borderColor: colors.accent },
+  dotCurrent: { borderColor: colors.accent, borderWidth: 3 },
+  line: { flex: 1, width: 2, backgroundColor: colors.hairline, minHeight: 24 },
+  lineDone: { backgroundColor: colors.accent },
+  stepBody: { flex: 1, paddingBottom: 12, gap: 2 },
+  stepLabel: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.muted },
+  stepLabelActive: { fontFamily: fonts.semibold, color: colors.text },
+  stepTime: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
 
-  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link, textAlign: 'center' },
-  footnote: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted, textAlign: 'center' },
+  cta: { marginTop: 20 },
+  message: { marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8 },
+  messageText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  note: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted, textAlign: 'center', marginTop: 8 },
 });
