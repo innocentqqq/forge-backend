@@ -11,7 +11,10 @@ const db = new PGlite();
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
-const NEW_MIGRATION = '20261119000001_lock_down_orders_printers_models.sql';
+const NEW_MIGRATIONS = [
+  '20261119000001_lock_down_orders_printers_models.sql',
+  '20261119000002_profiles_providers_read_only.sql',
+];
 
 // --- Supabase shim (what the hosted platform provides) -----------------------
 await db.exec(`
@@ -40,10 +43,10 @@ await db.exec(`
 const files = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
-for (const file of files.filter((f) => f !== NEW_MIGRATION)) {
+for (const file of files.filter((f) => !NEW_MIGRATIONS.includes(f))) {
   await db.exec(readFileSync(join(migrationsDir, file), 'utf8'));
 }
-console.log(`applied ${files.length - 1} existing migrations`);
+console.log(`applied ${files.length - NEW_MIGRATIONS.length} existing migrations`);
 
 // Seed as superuser (the profiles trigger runs on auth.users insert).
 await db.exec(`
@@ -61,6 +64,8 @@ await db.exec(`
   insert into public.model_files (id, user_id, file_name, material) values
     (gen_random_uuid(), '${ALICE}', 'alice.stl', 'PLA'), (gen_random_uuid(), '${BOB}', 'bob.stl', 'PLA');
   insert into public.pricing_rules (material, rate) values ('PLA', 0.05) on conflict do nothing;
+  insert into public.providers (user_id, type, display_name, pickup_area, pickup_address)
+    values ('${ALICE}', 'LAB', 'Alice Lab', 'Campus', 'Building 4, Room 1');
 `);
 
 // BEFORE: prove the hole exists.
@@ -82,8 +87,20 @@ const before = await as('anon', null, 'select count(*)::int as n from public.ord
 console.log(`BEFORE: anon can read ${before.rows?.[0]?.n} orders (expected 3 = the hole)`);
 
 // --- the new migration (must succeed even with the orphan row) ---------------
-await db.exec(readFileSync(join(migrationsDir, NEW_MIGRATION), 'utf8'));
-console.log(`applied ${NEW_MIGRATION} with a legacy orphan row present`);
+const beforeVerify = await as(
+  'authenticated',
+  ALICE,
+  `update public.providers set is_verified = true where user_id = '${ALICE}'`,
+);
+console.log(
+  `BEFORE: alice can self-verify her provider: ${beforeVerify.affected === 1} (expected true = the hole)`,
+);
+await db.exec(`update public.providers set is_verified = false where user_id = '${ALICE}'`);
+
+for (const file of NEW_MIGRATIONS) {
+  await db.exec(readFileSync(join(migrationsDir, file), 'utf8'));
+  console.log(`applied ${file} (legacy orphan row present)`);
+}
 
 // --- checks -------------------------------------------------------------------
 let failed = 0;
@@ -157,6 +174,45 @@ check('anyone can read pricing rules', count(r) >= 1, r);
 r = await as('authenticated', ALICE, `update public.pricing_rules set rate = 0`);
 check('alice cannot change pricing rules', denied(r), r);
 
+// providers / profiles: read own row, no direct writes
+r = await as(
+  'authenticated',
+  ALICE,
+  `update public.providers set is_verified = true where user_id = '${ALICE}'`,
+);
+check('alice cannot self-verify her provider', denied(r), r);
+r = await as(
+  'authenticated',
+  BOB,
+  `insert into public.providers (user_id, type, display_name, pickup_area, pickup_address, is_verified)
+   values ('${BOB}', 'LAB', 'Fake verified', 'X', 'Somewhere 1', true)`,
+);
+check('bob cannot create a pre-verified provider directly', Boolean(r.error), r);
+r = await as('authenticated', ALICE, 'select display_name from public.providers');
+check(
+  'alice can still read her own provider',
+  r.rows?.length === 1 && r.rows[0].display_name === 'Alice Lab',
+  r,
+);
+r = await as('authenticated', BOB, 'select count(*)::int as n from public.providers');
+check('bob cannot read alice’s provider (pickup address)', count(r) === 0, r);
+r = await as(
+  'authenticated',
+  ALICE,
+  `update public.profiles set full_name = 'Hacked' where id = '${ALICE}'`,
+);
+check('alice cannot edit her profile directly (API only)', denied(r), r);
+r = await as('authenticated', ALICE, 'select id from public.profiles');
+check('alice can still read her own profile (app session check)', r.rows?.length === 1, r);
+r = await as('anon', null, 'select count(*)::int as n from public.providers');
+check('anon cannot read providers', Boolean(r.error) || count(r) === 0, r);
+r = await as(
+  'service_role',
+  null,
+  `update public.providers set is_verified = true where user_id = '${ALICE}'`,
+);
+check('service role (API/admin) can still verify providers', !r.error && r.affected === 1, r);
+
 // service role (what the API / Edge Function use) is unaffected
 r = await as('service_role', null, 'select count(*)::int as n from public.orders');
 check('service role (API) still reads all orders', count(r) === 3, r);
@@ -222,11 +278,13 @@ check(
 );
 
 // idempotent: running the migration again must not fail
-const rerun = await db.exec(readFileSync(join(migrationsDir, NEW_MIGRATION), 'utf8')).then(
-  () => null,
-  (e) => e.message,
-);
-check('migration can be re-run safely', rerun === null, rerun);
+const rerun = await db
+  .exec(NEW_MIGRATIONS.map((file) => readFileSync(join(migrationsDir, file), 'utf8')).join('\n'))
+  .then(
+    () => null,
+    (e) => e.message,
+  );
+check('new migrations can be re-run safely', rerun === null, rerun);
 
 console.log(failed ? `\n${failed} check(s) FAILED` : '\nall checks passed');
 process.exit(failed ? 1 : 0);

@@ -2,10 +2,10 @@
 
 The Forge API exists twice with the same contract (see [architecture](architecture.md)):
 
-| Implementation | Base URL | Used by |
-|---|---|---|
-| Supabase Edge Function (deployed) | `https://<project-ref>.supabase.co/functions/v1/forge-api` | The app by default |
-| Express (`apps/api/src`) | `http://localhost:4000/api/v1` | Local development, tests, `EXPO_PUBLIC_API_URL` |
+| Implementation                    | Base URL                                                   | Used by                                         |
+| --------------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| Supabase Edge Function (deployed) | `https://<project-ref>.supabase.co/functions/v1/forge-api` | The app by default                              |
+| Express (`apps/api/src`)          | `http://localhost:4000/api/v1`                             | Local development, tests, `EXPO_PUBLIC_API_URL` |
 
 Paths below are relative to the base URL. Shapes are defined in
 [`packages/types/src/index.ts`](../packages/types/src/index.ts) (`Order`, `Printer`, `Profile`, …).
@@ -21,42 +21,48 @@ Paths below are relative to the base URL. Shapes are defined in
 - **Errors** always use this envelope; messages never contain database internals:
 
   ```json
-  { "error": { "code": "VALIDATION_ERROR", "message": "material: Invalid enum value" } }
+  {
+    "error": {
+      "code": "VALIDATION_ERROR",
+      "message": "material: Invalid enum value"
+    }
+  }
   ```
 
   Common codes: `VALIDATION_ERROR` (400), `INVALID_JSON` (400), `UNAUTHORIZED` (401),
   `FORBIDDEN` (403), `NOT_FOUND` (404), `FILE_TOO_LARGE` (413), `DATABASE_ERROR` /
   `INTERNAL_ERROR` (500).
+
 - **Naming:** printers and orders are returned as database rows (snake_case); profiles and
   providers are camelCase.
 
 ## Health
 
-| Method | Path | Response |
-|---|---|---|
-| GET | `/health` | `{ status: "ok", service, uptime, timestamp }` |
+| Method | Path      | Response                                       |
+| ------ | --------- | ---------------------------------------------- |
+| GET    | `/health` | `{ status: "ok", service, uptime, timestamp }` |
 
 ## Auth
 
-| Method | Path | | Notes |
-|---|---|---|---|
-| POST | `/auth/oauth-signin-check` | 🔒 | Called after a Google/GitHub **sign-in**. Deletes the account if this sign-in just created it. → `{ deleted: boolean }` |
+| Method | Path                       |     | Notes                                                                                                                   |
+| ------ | -------------------------- | --- | ----------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/auth/oauth-signin-check` | 🔒  | Called after a Google/GitHub **sign-in**. Deletes the account if this sign-in just created it. → `{ deleted: boolean }` |
 
 ## Printers (public)
 
-| Method | Path | Query / body | Response |
-|---|---|---|---|
-| GET | `/printers` | `lat`, `lng` (optional, together), `sort` = `nearest` \| `cheapest` \| `fastest` (default `nearest`) | `{ printers: Printer[] }` with `distance_km` (km, or `null` without a location) |
-| GET | `/printers/:id` | | `{ printer: Printer }` |
+| Method | Path            | Query / body                                                                                         | Response                                                                        |
+| ------ | --------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| GET    | `/printers`     | `lat`, `lng` (optional, together), `sort` = `nearest` \| `cheapest` \| `fastest` (default `nearest`) | `{ printers: Printer[] }` with `distance_km` (km, or `null` without a location) |
+| GET    | `/printers/:id` |                                                                                                      | `{ printer: Printer }`                                                          |
 
 ## Models (uploads) 🔒
 
 Upload flow: get an upload link → upload the file to Supabase Storage with it → process it.
 
-| Method | Path | Body | Response |
-|---|---|---|---|
-| POST | `/models/upload-url` | `{ fileName: string, size?: number }` | `{ id, fileName, url, token, path }` |
-| POST | `/models/:id/process` | `{ material: Material, fileName?: string }` | `{ id, dimensions: {x,y,z} (mm), volume (cm³) }` |
+| Method | Path                  | Body                                        | Response                                         |
+| ------ | --------------------- | ------------------------------------------- | ------------------------------------------------ |
+| POST   | `/models/upload-url`  | `{ fileName: string, size?: number }`       | `{ id, fileName, url, token, path }`             |
+| POST   | `/models/:id/process` | `{ material: Material, fileName?: string }` | `{ id, dimensions: {x,y,z} (mm), volume (cm³) }` |
 
 - `fileName` must end in `.stl`, `.3mf` or `.obj`; `size` (bytes) must be ≤ 50 MB. The
   `models` bucket also enforces the 50 MB limit.
@@ -68,12 +74,12 @@ Upload flow: get an upload link → upload the file to Supabase Storage with it 
 
 ## Orders 🔒
 
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/orders` | | `{ orders: Order[] }` — **the caller's own orders only**, newest first, with `printers` and `order_status_events` |
-| GET | `/orders/:id` | | `{ order: Order }` — 404 unless it is the caller's order |
-| POST | `/orders` | see below | `201 { order: Order }` |
-| PATCH | `/orders/:id/status` | `{ status: OrderStatus, notes?: string }` | `{ order: Order }` |
+| Method | Path                 | Body                                      | Response                                                                                                          |
+| ------ | -------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| GET    | `/orders`            |                                           | `{ orders: Order[] }` — **the caller's own orders only**, newest first, with `printers` and `order_status_events` |
+| GET    | `/orders/:id`        |                                           | `{ order: Order }` — 404 unless it is the caller's order                                                          |
+| POST   | `/orders`            | see below                                 | `201 { order: Order }`                                                                                            |
+| PATCH  | `/orders/:id/status` | `{ status: OrderStatus, notes?: string }` | `{ order: Order }`                                                                                                |
 
 Create body:
 
@@ -99,32 +105,32 @@ event. `price_snapshot` is currently a placeholder estimate.
 
 **Who may change a status:**
 
-| Caller | Allowed |
-|---|---|
-| Provider that owns the order's printer | Any status |
-| The customer who placed it | Only `CANCELLED`, and only while `PENDING_ACCEPTANCE` or `CONFIRMED` (else `403 FORBIDDEN`) |
-| Anyone else | `404 NOT_FOUND` |
+| Caller                                 | Allowed                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Provider that owns the order's printer | Any status                                                                                  |
+| The customer who placed it             | Only `CANCELLED`, and only while `PENDING_ACCEPTANCE` or `CONFIRMED` (else `403 FORBIDDEN`) |
+| Anyone else                            | `404 NOT_FOUND`                                                                             |
 
 ## Profile 🔒
 
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/profile` | | `Profile` (created on first call if missing) |
-| PATCH | `/profile` | any of `fullName`, `avatarUrl`, `phone`, `notifications{email,push,orderUpdates,promotions}`, `preferences{material,quality}` | `Profile` |
-| GET | `/profile/stats` | | `{ printsCompleted, totalOrders, savedProviders }` |
-| GET | `/profile/saved-providers` | | `SavedProvider[]` |
-| POST | `/profile/saved-providers` | `{ providerId: uuid }` | `201 SavedProvider` |
-| DELETE | `/profile/saved-providers/:id` | | `{ success: true }` |
+| Method | Path                           | Body                                                                                                                          | Response                                           |
+| ------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| GET    | `/profile`                     |                                                                                                                               | `Profile` (created on first call if missing)       |
+| PATCH  | `/profile`                     | any of `fullName`, `avatarUrl`, `phone`, `notifications{email,push,orderUpdates,promotions}`, `preferences{material,quality}` | `Profile`                                          |
+| GET    | `/profile/stats`               |                                                                                                                               | `{ printsCompleted, totalOrders, savedProviders }` |
+| GET    | `/profile/saved-providers`     |                                                                                                                               | `SavedProvider[]`                                  |
+| POST   | `/profile/saved-providers`     | `{ providerId: uuid }`                                                                                                        | `201 SavedProvider`                                |
+| DELETE | `/profile/saved-providers/:id` |                                                                                                                               | `{ success: true }`                                |
 
 ## Providers 🔒
 
-| Method | Path | | Body | Response |
-|---|---|---|---|---|
-| POST | `/providers/onboard` | 🔒 | see below | `201 Provider` (`409 PROVIDER_ALREADY_EXISTS` if already a provider) |
-| GET | `/providers/me` | 🏭 | | `Provider` |
-| PATCH | `/providers/me` | 🏭 | any of `type`, `displayName`, `bio`, `pickupArea`, `pickupAddress`, `latitude`+`longitude`, `availability{isOpen,maxQueueSize,pickupHours}` | `Provider` |
-| GET | `/providers/me/printers` | 🏭 | | `{ printers: Printer[] }` |
-| GET | `/providers/me/orders` | 🏭 | | `{ orders: Order[] }` — orders placed on the provider's printers |
+| Method | Path                     |     | Body                                                                                                                                        | Response                                                             |
+| ------ | ------------------------ | --- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| POST   | `/providers/onboard`     | 🔒  | see below                                                                                                                                   | `201 Provider` (`409 PROVIDER_ALREADY_EXISTS` if already a provider) |
+| GET    | `/providers/me`          | 🏭  |                                                                                                                                             | `Provider`                                                           |
+| PATCH  | `/providers/me`          | 🏭  | any of `type`, `displayName`, `bio`, `pickupArea`, `pickupAddress`, `latitude`+`longitude`, `availability{isOpen,maxQueueSize,pickupHours}` | `Provider`                                                           |
+| GET    | `/providers/me/printers` | 🏭  |                                                                                                                                             | `{ printers: Printer[] }`                                            |
+| GET    | `/providers/me/orders`   | 🏭  |                                                                                                                                             | `{ orders: Order[] }` — orders placed on the provider's printers     |
 
 Onboard body (`printer` is optional and creates the provider's first printer at the pickup
 location):
@@ -153,8 +159,8 @@ location):
 Clients only need the API. With the public anon key, row-level security allows:
 
 - **Anyone:** read the printer catalogue and pricing rules.
-- **Signed-in users:** read their own orders, order events and model files; read and edit
-  their own profile, provider profile and saved providers/printers.
-- **Nobody (client-side):** write printers, orders, order events, model files or pricing
-  rules. Those writes go through the API, which uses the service role. See
-`apps/api/supabase/migrations/20261119000001_lock_down_orders_printers_models.sql`.
+- **Signed-in users:** read their own profile, provider profile, orders, order events and
+  model files; manage their own saved providers/printers.
+- **Nobody (client-side):** write profiles, providers (including `is_verified`), printers,
+  orders, order events, model files or pricing rules. Those writes go through the API, which
+  uses the service role. See migrations `20261119000001` and `20261119000002` in `apps/api/supabase/migrations/`.

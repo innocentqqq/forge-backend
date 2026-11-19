@@ -65,8 +65,10 @@ Conventions for new code:
 - **Migrations:** `supabase/migrations/*.sql` (14-digit timestamps). Apply with the Supabase CLI
   (`supabase db push`) or the SQL editor, in order.
 - **Row-level security:** every public table has RLS enabled. Clients get read-only access to
-  their own rows (and public catalogue data); all writes to printers, orders, events and model
-  files go through the API. `npm run test:rls` proves this against all migrations.
+  their own rows (and public catalogue data); all writes to profiles, providers (including
+  `is_verified`), printers, orders, events and model files go through the API. Saved
+  providers/printers remain client-writable for the owner. `npm run test:rls` proves this
+  against all migrations.
 - **Storage:** private `models` bucket, 50 MB per file, created by migration
   `20261119000001`. Uploads use signed URLs issued by the API.
 - **Foreign keys** `orders.user_id → auth.users` and `printers.provider_id → providers` are
