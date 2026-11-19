@@ -4,6 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { AppHeader, Banner, Button, ProgressBar, Screen } from '../../components/ui';
 import { api } from '../../lib/api';
 import { formatMoney } from '../../lib/format';
+import { useMarketplaceOrder } from '../../lib/marketplace-hooks';
 import { fonts } from '../../lib/fonts';
 import { colors, radius } from '../../lib/theme';
 import type { OrderStatus } from '../../lib/types';
@@ -28,9 +29,10 @@ function stageIndex(status: OrderStatus) {
 
 function nextAction(status: OrderStatus): { label: string; next: OrderStatus } | null {
   switch (status) {
-    case 'CONFIRMED':
     case 'PENDING_ACCEPTANCE':
-      return { label: 'Accept order', next: 'IN_QUEUE' };
+      return { label: 'Confirm order', next: 'CONFIRMED' };
+    case 'CONFIRMED':
+      return { label: 'Add to queue', next: 'IN_QUEUE' };
     case 'IN_QUEUE':
       return { label: 'Start printing', next: 'PRINTING' };
     case 'PRINTING':
@@ -54,11 +56,15 @@ export default function ProviderOrderScreen() {
     progress?: string;
   }>();
   const router = useRouter();
-  const [status, setStatus] = useState<OrderStatus>((params.status as OrderStatus) || 'CONFIRMED');
-  const [progress, setProgress] = useState(Number(params.progress) || 60);
+  const { order: liveOrder } = useMarketplaceOrder(params.id);
+  const [manualStatus, setManualStatus] = useState<OrderStatus>((params.status as OrderStatus) || 'CONFIRMED');
+  const [manualProgress, setManualProgress] = useState(Number(params.progress) || 60);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [demoStarted, setDemoStarted] = useState(false);
 
+  const status = liveOrder?.status ?? manualStatus;
+  const progress = liveOrder?.progress ?? manualProgress;
   const current = stageIndex(status);
   const action = nextAction(status);
 
@@ -67,12 +73,42 @@ export default function ProviderOrderScreen() {
     setBusy(true);
     setError('');
     try {
-      await api.updateOrderStatus(params.id, action.next);
-      setStatus(action.next);
-      setProgress(action.next === 'READY_FOR_PICKUP' ? 100 : action.next === 'PRINTING' ? 60 : action.next === 'IN_QUEUE' ? 50 : 25);
+      const nextProgress = action.next === 'READY_FOR_PICKUP' ? 100 : action.next === 'PRINTING' ? Math.max(progress, 10) : progress;
+      await api.updateMarketplaceProgress(params.id, nextProgress, action.next);
+      setManualStatus(action.next);
+      setManualProgress(nextProgress);
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update the order');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const adjustProgress = async (amount: number) => {
+    if (!params.id || status !== 'PRINTING') return;
+    const nextProgress = Math.max(0, Math.min(99, progress + amount));
+    setBusy(true);
+    setError('');
+    try {
+      await api.updateMarketplaceProgress(params.id, nextProgress, status);
+      setManualProgress(nextProgress);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update progress.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startDemo = async () => {
+    if (!params.id) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.startDemoPrint(params.id);
+      setDemoStarted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start the demo print.');
     } finally {
       setBusy(false);
     }
@@ -102,6 +138,36 @@ export default function ProviderOrderScreen() {
           <Text style={styles.progressValue}>{progress}%</Text>
         </View>
         <ProgressBar value={progress} height={6} />
+        {status === 'PRINTING' ? (
+          <View style={styles.progressControls}>
+            <Button title="−10%" size="sm" variant="secondary" disabled={busy || progress <= 0} onPress={() => void adjustProgress(-10)} />
+            <Button title="+10%" size="sm" disabled={busy || progress >= 99} onPress={() => void adjustProgress(10)} />
+          </View>
+        ) : null}
+
+        <View style={styles.demoCard}>
+          <Text style={styles.demoTitle}>Automated print demo</Text>
+          <Text style={styles.demoCopy}>
+            {demoStarted || status === 'READY_FOR_PICKUP'
+              ? `Print running at ${progress}%. The customer tracking screen updates as it builds.`
+              : 'Accepts the order and reveals the model from 0% to 100% over 60 seconds.'}
+          </Text>
+          {status !== 'READY_FOR_PICKUP' ? (
+            <Button
+              title={demoStarted ? 'Demo running…' : 'Start 60-second demo print'}
+              size="sm"
+              variant={demoStarted ? 'secondary' : 'primary'}
+              loading={busy && !demoStarted}
+              disabled={busy || demoStarted}
+              onPress={() => void startDemo()}
+            />
+          ) : null}
+          {params.id ? (
+            <Pressable onPress={() => router.push(`/order/${params.id}`)} hitSlop={8}>
+              <Text style={styles.link}>Open customer tracking</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.timeline}>
           {STEPS.map((label, index) => {
@@ -185,6 +251,10 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 6 },
 
   statusHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressControls: { flexDirection: 'row', gap: 10 },
+  demoCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, gap: 10 },
+  demoTitle: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 18, color: colors.text },
+  demoCopy: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, color: colors.muted },
 
   timeline: {
     backgroundColor: colors.surface,

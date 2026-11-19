@@ -3,6 +3,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, Screen, StatusPill } from '../components/ui';
 import { Icon, icons } from '../components/icons';
+import { formatDate } from '../lib/format';
 import { fonts } from '../lib/fonts';
 import { colors, radius, shadow } from '../lib/theme';
 
@@ -23,19 +24,19 @@ export default function OrderConfirmationScreen() {
           <Icon name={icons.box} size={26} color={colors.text} />
         </View>
 
-        <Text style={styles.title}>Order placed!</Text>
+        <Text style={styles.title}>Order request sent</Text>
 
-        <StatusPill label="Confirmed" tone="done" />
+        <StatusPill label="Waiting for provider" tone="queued" />
 
         <Text style={styles.body}>
           {orderNumber
-            ? `Order #${orderNumber} is queued at ${printer || 'your provider'}. We will notify you when it is ready for pickup.`
-            : 'Your print is queued. We will notify you when it is ready for pickup.'}
+            ? `Order #${orderNumber} was sent to ${printer || 'your provider'}. They must accept it before printing begins.`
+            : 'Your print request was sent. The provider must accept it before printing begins.'}
         </Text>
 
         <View style={styles.etaCard}>
           <Text style={styles.etaLabel}>Estimated ready</Text>
-          <Text style={styles.etaValue}>{eta || 'We will confirm shortly'}</Text>
+          <Text style={styles.etaValue}>{eta ? formatDate(eta) : 'Provider to confirm'}</Text>
         </View>
 
         <Button

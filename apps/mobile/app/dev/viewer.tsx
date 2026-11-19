@@ -46,7 +46,7 @@ export default function ViewerDevScreen() {
       <AppHeader back />
       <View style={styles.content}>
         <SectionTitle>3D viewer playground</SectionTitle>
-        <Body muted>Drag to rotate · pinch to zoom · slide to build</Body>
+        <Body muted>Drag to rotate · two fingers to move or zoom · slide to build</Body>
 
         <View style={styles.picker}>
           {SAMPLE_MODELS.map((item, index) => (

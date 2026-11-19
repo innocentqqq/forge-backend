@@ -19,9 +19,11 @@ import type { BoundingBox, LoadedModel } from './types';
 const VIEW_SIZE = 3.4;
 const DEFAULT_DISTANCE = 8;
 
-// A single viewer is on screen at a time. Keeping the plane outside React lets
-// the render loop animate it without fighting the compiler's immutability rules.
+// A single viewer is on screen at a time. Keeping these outside React lets the
+// render loop animate and follow gestures without re-rendering the scene.
 const CLIP_PLANE = new Plane(new Vector3(0, -1, 0), 0);
+const CAMERA_TARGET = new Vector3();
+const CAMERA_OFFSET = new Vector3();
 
 export interface SceneProps {
   model: LoadedModel;
@@ -40,6 +42,10 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
   const scale = VIEW_SIZE / longestSide;
   // STL's Z axis becomes world Y, so "height" is the Z dimension of the box.
   const modelHeight = boundingBox.z * scale;
+
+  const isComplete = progress !== undefined && progress >= 100;
+  // A finished print no longer needs the bed overlay or the build-layer line.
+  const visibleBuildVolume = buildVolume && !isComplete ? buildVolume : undefined;
 
   const exceedsBed = buildVolume
     ? boundingBox.x > buildVolume.x || boundingBox.y > buildVolume.y || boundingBox.z > buildVolume.z
@@ -63,7 +69,7 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
     };
   });
   const modelMaterial =
-    progress === undefined
+    progress === undefined || isComplete
       ? exceedsBed
         ? sceneAssets.warning
         : sceneAssets.plain
@@ -80,10 +86,14 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
 
   const bedGeometry = useMemo(
     () =>
-      buildVolume
-        ? new BoxGeometry(buildVolume.x * scale, buildVolume.z * scale, buildVolume.y * scale)
+      visibleBuildVolume
+        ? new BoxGeometry(
+            visibleBuildVolume.x * scale,
+            visibleBuildVolume.z * scale,
+            visibleBuildVolume.y * scale,
+          )
         : null,
-    [buildVolume, scale],
+    [visibleBuildVolume, scale],
   );
   const bedEdges = useMemo(() => (bedGeometry ? new EdgesGeometry(bedGeometry) : null), [bedGeometry]);
 
@@ -105,19 +115,22 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
   );
 
   useFrame(({ camera }, delta) => {
-    const { azimuth, polar, distance } = controls.current;
-    const radius = MathUtils.damp(camera.position.length(), distance, 8, delta);
+    const { azimuth, polar, distance, target } = controls.current;
+    CAMERA_TARGET.set(target.x, target.y, target.z);
+    CAMERA_OFFSET.copy(camera.position).sub(CAMERA_TARGET);
+    const radius = MathUtils.damp(CAMERA_OFFSET.length(), distance, 8, delta);
     camera.position.set(
-      radius * Math.sin(polar) * Math.sin(azimuth),
-      radius * Math.cos(polar),
-      radius * Math.sin(polar) * Math.cos(azimuth),
+      target.x + radius * Math.sin(polar) * Math.sin(azimuth),
+      target.y + radius * Math.cos(polar),
+      target.z + radius * Math.sin(polar) * Math.cos(azimuth),
     );
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(CAMERA_TARGET);
 
     if (progress === undefined) return;
-    const target = -modelHeight / 2 + (MathUtils.clamp(progress, 0, 100) / 100) * modelHeight;
-    cutHeight.current = cutHeight.current === null ? target : MathUtils.damp(cutHeight.current, target, 6, delta);
+    const cutTarget = -modelHeight / 2 + (MathUtils.clamp(progress, 0, 100) / 100) * modelHeight;
+    cutHeight.current = cutHeight.current === null ? cutTarget : MathUtils.damp(cutHeight.current, cutTarget, 6, delta);
     CLIP_PLANE.constant = cutHeight.current;
+    if (isComplete) return;
 
     const halfWidth = (boundingBox.x * scale) / 2;
     const halfDepth = (boundingBox.y * scale) / 2;
@@ -165,7 +178,7 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
         </group>
       ) : null}
 
-      {progress === undefined ? null : (
+      {progress === undefined || isComplete ? null : (
         <lineLoop geometry={lineGeometry}>
           <lineBasicMaterial color={colors.link} transparent opacity={0.85} depthTest={false} />
         </lineLoop>

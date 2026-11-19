@@ -14,6 +14,8 @@ export interface ModelViewerProps {
   /** Optional printer bed outline, in millimetres. */
   buildVolume?: BoundingBox;
   onLoaded?: (info: { boundingBox: BoundingBox }) => void;
+  /** Fires while a touch gesture is active so a parent ScrollView can pause. */
+  onInteractionChange?: (active: boolean) => void;
 }
 
 export interface LoadedModel {

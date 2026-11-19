@@ -25,25 +25,26 @@ import { api, ApiError } from '../../lib/api';
 import { formatDate, formatMoney, STATUS_LABELS } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
 import { colors, radius } from '../../lib/theme';
-import { MATERIALS, type Material, type Order, type Printer, type Provider } from '../../lib/types';
+import { MATERIALS, type Material, type Printer, type Provider, type Quality } from '../../lib/types';
+import type { MarketplaceOrder } from '../../lib/marketplace-types';
 
 const LOCATION = { lat: 13.8708, lng: 100.6053 };
 
-const QUALITY_LABELS: Record<Order['quality'], string> = {
+const QUALITY_LABELS: Record<Quality, string> = {
   DRAFT: '0.2 mm',
   STANDARD: '0.15 mm',
   HIGH: '0.1 mm',
 };
 
-function progressForStatus(status: Order['status']) {
+function progressForStatus(status: MarketplaceOrder['status']) {
   switch (status) {
-    case 'CONFIRMED':
     case 'PENDING_ACCEPTANCE':
-      return 25;
+    case 'CONFIRMED':
+      return 0;
     case 'IN_QUEUE':
-      return 50;
+      return 0;
     case 'PRINTING':
-      return 60;
+      return 10;
     case 'READY_FOR_PICKUP':
       return 100;
     default:
@@ -55,7 +56,7 @@ export default function ProviderScreen() {
   const router = useRouter();
   const [provider, setProvider] = useState<Provider | null>(null);
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<MarketplaceOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,11 +78,11 @@ export default function ProviderScreen() {
       setProvider(nextProvider);
 
       if (nextProvider) {
-        const [orderResult, printerResult] = await Promise.all([
-          api.getProviderOrders().catch(() => ({ orders: [] as Order[] })),
-          api.getMyPrinters().catch(() => ({ printers: [] as Printer[] })),
+        const [nextOrders, printerResult] = await Promise.all([
+          api.getMarketplaceProviderOrders(),
+          api.getMyPrinters(),
         ]);
-        setOrders(orderResult.orders);
+        setOrders(nextOrders);
         setPrinters(printerResult.printers);
       } else {
         setOrders([]);
@@ -101,7 +102,7 @@ export default function ProviderScreen() {
     }, [load]),
   );
 
-  const openOrder = (order: Order) => {
+  const openOrder = (order: MarketplaceOrder) => {
     router.push({
       pathname: '/provider-order/[id]' as never,
       params: {
@@ -113,16 +114,16 @@ export default function ProviderScreen() {
         quality: QUALITY_LABELS[order.quality],
         quantity: String(order.quantity),
         status: order.status,
-        pickup: order.printers?.location_details ?? order.printers?.name ?? 'Pickup details in order',
-        progress: String(order.progress || progressForStatus(order.status)),
+        pickup: provider?.pickupArea ?? order.printers?.location_details ?? 'Pickup details in order',
+        progress: String(order.progress ?? progressForStatus(order.status)),
       },
     });
   };
 
-  const updateStatus = async (order: Order, status: string) => {
+  const updateStatus = async (order: MarketplaceOrder, status: MarketplaceOrder['status']) => {
     setActionError('');
     try {
-      await api.updateOrderStatus(order.id, status);
+      await api.updateMarketplaceProgress(order.id, progressForStatus(status), status);
       await load(true);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not update the order');
@@ -323,12 +324,12 @@ function ProviderDashboard({
 }: {
   provider: Provider;
   printers: Printer[];
-  orders: Order[];
+  orders: MarketplaceOrder[];
   refreshing: boolean;
   actionError: string;
   onRefresh: () => void;
-  onOpenOrder: (order: Order) => void;
-  onUpdateStatus: (order: Order, status: string) => void;
+  onOpenOrder: (order: MarketplaceOrder) => void;
+  onUpdateStatus: (order: MarketplaceOrder, status: MarketplaceOrder['status']) => void;
   onAvailabilityChange: (isOpen: boolean) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -412,7 +413,7 @@ function ProviderDashboard({
               <Text style={styles.orderMeta}>Placed {formatDate(order.created_at)}</Text>
 
               <View style={styles.orderActions}>
-                {order.status === 'CONFIRMED' || order.status === 'PENDING_ACCEPTANCE' ? (
+                {order.status === 'PENDING_ACCEPTANCE' ? (
                   <>
                     <Button
                       title="Decline"
@@ -426,10 +427,18 @@ function ProviderDashboard({
                       title="Accept order"
                       size="sm"
                       labelSize="md"
-                      onPress={() => onUpdateStatus(order, 'IN_QUEUE')}
+                      onPress={() => onUpdateStatus(order, 'CONFIRMED')}
                       style={styles.acceptButton}
                     />
                   </>
+                ) : order.status === 'CONFIRMED' ? (
+                  <Button
+                    title="Add to queue"
+                    size="sm"
+                    labelSize="md"
+                    onPress={() => onUpdateStatus(order, 'IN_QUEUE')}
+                    style={styles.flex}
+                  />
                 ) : order.status === 'IN_QUEUE' ? (
                   <Button
                     title="Start printing"

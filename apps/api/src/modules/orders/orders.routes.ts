@@ -1,12 +1,21 @@
 import { Router } from 'express';
-import { createOrder, getOrders, getOrderById, updateOrderStatus } from './orders.controller';
 import { requireAuth } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/error';
+import * as controller from './orders.controller';
 
 const router = Router();
 
-router.post('/', requireAuth, createOrder);
-router.get('/', requireAuth, getOrders);
-router.get('/:id', requireAuth, getOrderById);
-router.patch('/:id/status', requireAuth, updateOrderStatus);
+router.use(requireAuth);
+
+router.post('/', asyncHandler(controller.createOrderHandler));
+router.get('/', asyncHandler(controller.listOrdersHandler));
+router.get('/provider', asyncHandler(controller.listProviderOrdersHandler));
+
+router.post('/:id/accept', asyncHandler(controller.acceptOrderHandler));
+router.post('/:id/decline', asyncHandler(controller.declineOrderHandler));
+router.post('/:id/demo/start', asyncHandler(controller.startDemoPrintHandler));
+router.patch('/:id/progress', asyncHandler(controller.updateProgressHandler));
+router.patch('/:id/status', asyncHandler(controller.updateStatusHandler));
+router.get('/:id', asyncHandler(controller.getOrderHandler));
 
 export default router;

@@ -1,12 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, Screen } from '../components/ui';
 import { Icon, icons } from '../components/icons';
-import { estimatePrice } from '../lib/api';
+import { ModelViewer } from '../components/ModelViewer';
+import { api } from '../lib/api';
+import { resolveViewerSource } from '../lib/model-preview';
 import { formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
 import { colors, radius, shadow } from '../lib/theme';
+import type { ModelDetails } from '../lib/marketplace-types';
 import { MATERIALS, QUALITIES, type Material, type Quality } from '../lib/types';
 
 const COLORS = [
@@ -39,17 +42,73 @@ export default function PrintSettingsScreen() {
   const [quality, setQuality] = useState<Quality>('STANDARD');
   const [color, setColor] = useState('White');
   const [quantity, setQuantity] = useState(1);
+  const [model, setModel] = useState<ModelDetails | null>(null);
+  const [modelError, setModelError] = useState('');
+  const [estimate, setEstimate] = useState<number | null>(null);
+  const [loadingEstimate, setLoadingEstimate] = useState(true);
+  const [estimateError, setEstimateError] = useState('');
+  const [viewerInteracting, setViewerInteracting] = useState(false);
+  const loadingModel = Boolean(params.modelId) && !model && !modelError;
+  const preview = model ? resolveViewerSource(model) : null;
 
-  const estimated = useMemo(
-    () => estimatePrice({ material, quality, quantity, priceFactor: 1 }),
-    [material, quality, quantity],
-  );
+  useEffect(() => {
+    let active = true;
+    if (!params.modelId) return;
+    api.getModel(params.modelId).then((result) => {
+      if (active) setModel(result);
+    }).catch((err) => {
+      if (active) setModelError(err instanceof Error ? err.message : 'Could not load model details.');
+    });
+    return () => { active = false; };
+  }, [params.modelId]);
+
+  useEffect(() => {
+    if (!model) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      setLoadingEstimate(true);
+      setEstimateError('');
+      api.estimate({
+        modelId: model.id,
+        material,
+        quality,
+        quantity,
+      }).then((result) => {
+        if (active) setEstimate(result.estimate);
+      }).catch((err) => {
+        if (active) setEstimateError(err instanceof Error ? err.message : 'Could not calculate estimate.');
+      }).finally(() => {
+        if (active) setLoadingEstimate(false);
+      });
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [model, material, quality, quantity]);
 
   return (
     <Screen>
       <AppHeader back />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!viewerInteracting}
+      >
         <Text style={styles.pageLabel}>Print Settings</Text>
+
+        {preview ? (
+          <View style={styles.viewer}>
+            <ModelViewer
+              url={preview.url}
+              format={preview.format}
+              onInteractionChange={setViewerInteracting}
+            />
+          </View>
+        ) : null}
+        {loadingModel ? <Text style={styles.info}>Loading model details…</Text> : null}
+        {!params.modelId ? <Text accessibilityRole="alert" style={styles.error}>Upload a model before configuring a print.</Text> : null}
+        {modelError ? <Text accessibilityRole="alert" style={styles.error}>{modelError}</Text> : null}
 
         <View style={styles.objectCard}>
           <View style={styles.objectThumb}>
@@ -57,7 +116,11 @@ export default function PrintSettingsScreen() {
           </View>
           <View style={styles.objectCopy}>
             <Text style={styles.objectName} numberOfLines={1}>{params.fileName ?? 'Example Object'}</Text>
-            <Text style={styles.objectMeta}>Size: 85x 60 x45 mm{'\n'}Volume: 28.5cm³</Text>
+            <Text style={styles.objectMeta}>
+              {model
+                ? `Size: ${model.boundingBox.x} × ${model.boundingBox.y} × ${model.boundingBox.z} mm\nVolume: ${model.volumeCm3.toFixed(2)} cm³`
+                : 'Dimensions and volume appear after model processing.'}
+            </Text>
           </View>
         </View>
 
@@ -117,8 +180,11 @@ export default function PrintSettingsScreen() {
         </View>
 
         <View style={styles.priceCard}>
-          <Text style={styles.priceLabel}>Estimated Price</Text>
-          <Text style={styles.priceValue}>{formatMoney(estimated)}</Text>
+          <Text style={styles.priceLabel}>Price estimate</Text>
+          <Text style={styles.priceValue}>
+            {loadingEstimate ? 'Calculating…' : estimate === null ? '—' : formatMoney(estimate)}
+          </Text>
+          {estimateError ? <Text accessibilityRole="alert" style={styles.error}>{estimateError}</Text> : null}
         </View>
 
         <View style={{ height: 110 }} />
@@ -129,6 +195,7 @@ export default function PrintSettingsScreen() {
           title="Find Nearby Printers"
           size="sm"
           labelSize="md"
+          disabled={!model || loadingModel}
           onPress={() =>
             router.push({
               pathname: '/printers' as never,
@@ -153,6 +220,9 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24, gap: 12 },
   pressed: { opacity: 0.85 },
   pageLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  viewer: { height: 280, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.bg },
+  info: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
+  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.danger },
   sectionLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 4 },
 
   objectCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 13 },

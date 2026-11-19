@@ -99,3 +99,91 @@ Fetches model metadata along with a time-limited signed download URL (`viewUrl`)
   "viewUrl": "https://<supabase-url>/storage/v1/object/sign/models/..."
 }
 ```
+
+---
+
+## Pricing (Agent 2)
+
+### `POST /pricing/estimate` (authenticated)
+
+Returns an estimate only; the provider confirms the final price.
+
+```json
+{
+  "modelId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "material": "PLA",
+  "quality": "STANDARD",
+  "quantity": 2
+}
+```
+
+```json
+{ "estimate": 12.5 }
+```
+
+Formula: `ratePerCm3 × volumeCm3 × quantity × qualityFactor`.
+
+| Material | Rate / cm³ |
+|---|---:|
+| PLA | 0.05 |
+| ABS | 0.07 |
+| PETG | 0.08 |
+| TPU | 0.12 |
+
+| Quality | Factor |
+|---|---:|
+| DRAFT | 0.8 |
+| STANDARD | 1.0 |
+| HIGH | 1.3 |
+
+---
+
+## Providers (Agent 2)
+
+### `GET /providers` (public)
+
+Query: `modelId` (required), `material` (required), `sort=nearest|cheapest|fastest`.
+
+Returns providers that support the material. Providers whose build volume cannot fit the
+model are still returned with `"fits": false`. The exact pickup address is never exposed.
+
+```json
+{
+  "providers": [
+    {
+      "id": "provider-lab-north",
+      "displayName": "North Campus Print Lab",
+      "distanceKm": 2.4,
+      "estimate": 145,
+      "availability": "Accepting orders",
+      "fits": true,
+      "etaHours": 20,
+      "buildVolume": { "x": 256, "y": 256, "z": 256 }
+    }
+  ]
+}
+```
+
+---
+
+## Orders (Agent 2)
+
+All order routes require authentication. Statuses:
+`PENDING_ACCEPTANCE → CONFIRMED → IN_QUEUE → PRINTING → READY_FOR_PICKUP`,
+plus `DECLINED` and `CANCELLED`. Invalid transitions return `409 INVALID_STATUS_TRANSITION`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/orders` | Create an order linked to a model and provider/printer |
+| `GET` | `/orders` | List the customer's orders |
+| `GET` | `/orders/provider` | List the authenticated provider's orders |
+| `GET` | `/orders/:id` | Get one order (customer or owning provider) |
+| `POST` | `/orders/:id/accept` | Provider accepts a pending order |
+| `POST` | `/orders/:id/decline` | Provider declines a pending order |
+| `PATCH` | `/orders/:id/status` | Provider advances status; customer may cancel |
+| `PATCH` | `/orders/:id/progress` | Provider sets `progress` 0–100, optionally `status` |
+| `POST` | `/orders/:id/demo/start` | Dev helper: accept if needed and start a 60-second print demo |
+
+For the demo endpoint, `GET /orders/:id` derives `progress` and `status` from
+`demo_started_at` so both customer and provider screens advance without a background timer.
+A manual progress/status update cancels the demo projection.

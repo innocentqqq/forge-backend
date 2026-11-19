@@ -1,176 +1,69 @@
-import { Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
-import { estimatePrice } from '../pricing/pricing.service';
+import type { Request, Response } from 'express';
+import { getAuthUser } from '../../middleware/auth';
+import { AppError } from '../../middleware/error';
+import {
+  acceptOrder,
+  createOrder,
+  declineOrder,
+  getOrder,
+  listCustomerOrders,
+  listProviderOrders,
+  startDemoPrint,
+  updateProgress,
+  updateStatus,
+} from './orders.service';
+import { createOrderSchema, progressSchema, statusSchema } from './orders.schemas';
 
-const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321';
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'dummy-key';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-function generateOrderNumber(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 7; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+function orderId(req: Request): string {
+  const id = req.params.id;
+  if (!id) throw new AppError(400, 'MISSING_ORDER_ID', 'An order id is required.');
+  return id;
 }
 
-export async function createOrder(req: Request, res: Response) {
-  try {
-    const userId = (req as Request & { user?: { id: string; email: string } }).user?.id || null;
-    const { model_id, printer_id, material, quality, infill = 20, quantity = 1 } = req.body;
-
-    if (!model_id || !printer_id || !material || !quality) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Missing required fields: model_id, printer_id, material, quality',
-        },
-      });
-    }
-
-    const { data: printer, error: printerError } = await supabase
-      .from('printers')
-      .select('*')
-      .eq('id', printer_id)
-      .single();
-
-    if (printerError || !printer) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Printer not found' } });
-    }
-
-    let unitPrice = 100;
-    try {
-      if (typeof estimatePrice === 'function') {
-        const basePrice = estimatePrice({ material, volumeCm3: 20, quantity: 1, quality });
-        unitPrice = basePrice * Number(printer.price_factor);
-      }
-    } catch (_e) {
-      unitPrice = 100 * Number(printer.price_factor);
-    }
-
-    const priceSnapshot = unitPrice * Number(quantity);
-    const orderNumber = generateOrderNumber();
-
-    const hoursPerUnit = Number(printer.est_completion_hours_per_unit || 2);
-    const totalHours = hoursPerUnit * Number(quantity);
-    const eta = new Date(Date.now() + totalHours * 3600 * 1000);
-
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        order_number: orderNumber,
-        user_id: userId,
-        model_id,
-        printer_id,
-        material,
-        quality,
-        infill,
-        quantity,
-        price_snapshot: priceSnapshot,
-        status: 'CONFIRMED',
-        progress: 0,
-        eta: eta.toISOString(),
-      })
-      .select()
-      .single();
-
-    if (orderError) {
-      return res
-        .status(500)
-        .json({ error: { code: 'DATABASE_ERROR', message: orderError.message } });
-    }
-
-    await supabase.from('order_status_events').insert({
-      order_id: order.id,
-      status: 'CONFIRMED',
-      notes: 'Order created and confirmed.',
-    });
-
-    return res.status(201).json({ order });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
-  }
+export async function createOrderHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  const order = await createOrder(user.id, createOrderSchema.parse(req.body));
+  res.status(201).json({ order });
 }
 
-export async function getOrders(_req: Request, res: Response) {
-  try {
-    const query = supabase.from('orders').select('*, printers(*), order_status_events(*)');
-
-    const { data: orders, error } = await query.order('created_at', { ascending: false });
-    if (error) {
-      return res.status(500).json({ error: { code: 'DATABASE_ERROR', message: error.message } });
-    }
-
-    return res.json({ orders });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
-  }
+export async function listOrdersHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ orders: await listCustomerOrders(user.id) });
 }
 
-export async function getOrderById(req: Request, res: Response) {
-  try {
-    const { id } = req.params;
-    const { data: order, error } = await supabase
-      .from('orders')
-      .select('*, printers(*), order_status_events(*)')
-      .eq('id', id)
-      .single();
-
-    if (error || !order) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Order not found' } });
-    }
-
-    return res.json({ order });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
-  }
+export async function listProviderOrdersHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ orders: await listProviderOrders(user.id) });
 }
 
-export async function updateOrderStatus(req: Request, res: Response) {
-  try {
-    const { id } = req.params;
-    const { status, notes } = req.body;
+export async function getOrderHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ order: await getOrder(user.id, orderId(req)) });
+}
 
-    const validStatuses = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
-    if (!validStatuses.includes(status)) {
-      return res
-        .status(400)
-        .json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid order status' } });
-    }
+export async function updateProgressHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  const input = progressSchema.parse(req.body);
+  res.status(200).json({ order: await updateProgress(user.id, orderId(req), input) });
+}
 
-    let progress = 0;
-    if (status === 'CONFIRMED') progress = 10;
-    else if (status === 'IN_QUEUE') progress = 30;
-    else if (status === 'PRINTING') progress = 75;
-    else if (status === 'READY_FOR_PICKUP') progress = 100;
+export async function updateStatusHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  const input = statusSchema.parse(req.body);
+  res.status(200).json({ order: await updateStatus(user.id, orderId(req), input) });
+}
 
-    const { data: order, error: updateError } = await supabase
-      .from('orders')
-      .update({ status, progress, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select('*, printers(*)')
-      .single();
+export async function acceptOrderHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ order: await acceptOrder(user.id, orderId(req)) });
+}
 
-    if (updateError || !order) {
-      return res
-        .status(404)
-        .json({ error: { code: 'NOT_FOUND', message: 'Order not found or update failed' } });
-    }
+export async function declineOrderHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ order: await declineOrder(user.id, orderId(req)) });
+}
 
-    await supabase.from('order_status_events').insert({
-      order_id: id,
-      status,
-      notes: notes || `Status updated to ${status}`,
-    });
-
-    return res.json({ order });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message } });
-  }
+export async function startDemoPrintHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ order: await startDemoPrint(user.id, orderId(req)) });
 }

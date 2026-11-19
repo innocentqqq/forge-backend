@@ -1,25 +1,14 @@
-import { requireNativeModule } from 'expo';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AppHeader, Screen } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
 import { fonts } from '../../lib/fonts';
 import { colors, radius } from '../../lib/theme';
 import type { Printer } from '../../lib/types';
 
 const LOCATION = { lat: 13.8708, lng: 100.6053 };
-type PickedFile = { name: string; uri?: string; mimeType?: string; size?: number; file?: unknown };
-type PickerModule = { getDocumentAsync: (options: { type: string[]; copyToCacheDirectory: boolean; multiple: boolean }) => Promise<{ canceled: boolean; assets?: PickedFile[] }> };
-
-function newId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.floor(Math.random() * 16);
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -27,7 +16,6 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (refresh = false) => {
@@ -47,51 +35,7 @@ export default function HomeScreen() {
     }, [load]),
   );
 
-  const uploadFile = async (file: PickedFile, body: unknown) => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (!['stl', '3mf', 'obj'].includes(ext ?? '')) throw new Error('Choose an STL, 3MF, or OBJ file.');
-    const fileId = newId();
-    const signed = await api.createModelUploadUrl(fileId);
-    const content = body ?? (file.uri ? await fetch(file.uri).then((response) => response.blob()) : null);
-    if (!content) throw new Error('Could not read the selected file.');
-    const { error: uploadError } = await supabase.storage.from('models').uploadToSignedUrl(signed.path, signed.token, content as Blob, { contentType: file.mimeType ?? 'application/octet-stream' });
-    if (uploadError) throw uploadError;
-    await api.processModel(fileId, 'PLA');
-    router.push({ pathname: '/print-settings' as never, params: { modelId: fileId, fileName: file.name } });
-  };
-
-  const chooseDesign = async () => {
-    setError(null);
-    setUploading(true);
-    try {
-      if (Platform.OS === 'web') {
-        const doc = (globalThis as unknown as { document?: { createElement: (tag: string) => any } }).document;
-        if (!doc) throw new Error('File selection is unavailable in this browser.');
-        const input = doc.createElement('input');
-        input.type = 'file';
-        input.accept = '.stl,.3mf,.obj';
-        input.onchange = async () => {
-          const file = input.files?.[0] as PickedFile | undefined;
-          if (!file) { setUploading(false); return; }
-          try { await uploadFile(file, file); }
-          catch (err) { setError(err instanceof Error ? err.message : 'Could not upload the design'); }
-          finally { setUploading(false); }
-        };
-        input.click();
-        return;
-      }
-      const picker = requireNativeModule<PickerModule>('ExpoDocumentPicker');
-      const result = await picker.getDocumentAsync({ type: ['model/stl', 'model/3mf', 'model/obj', '*/*'], copyToCacheDirectory: true, multiple: false });
-      if (result.canceled) { setUploading(false); return; }
-      const file = result.assets?.[0];
-      if (!file) throw new Error('No file was selected.');
-      await uploadFile(file, file.file);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not select the design file';
-      setError(message);
-      if (Platform.OS !== 'web') Alert.alert('Upload failed', message);
-    } finally { setUploading(false); }
-  };
+  const chooseDesign = () => router.push('/upload' as never);
 
   const visible = printers.filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -117,12 +61,11 @@ export default function HomeScreen() {
         </View>
 
         <Pressable
-          onPress={() => void chooseDesign()}
-          disabled={uploading}
+          onPress={chooseDesign}
           style={({ pressed }) => [styles.upload, pressed && styles.pressed]}
         >
           <Icon name={icons.box} size={32} color={colors.text} />
-          <Text style={styles.uploadTitle}>{uploading ? 'Uploading design…' : 'Upload Your 3D Design'}</Text>
+          <Text style={styles.uploadTitle}>Upload Your 3D Design</Text>
           <Text style={styles.uploadHint}>STL, 3MF, OBJ supported</Text>
         </Pressable>
 
@@ -149,8 +92,8 @@ export default function HomeScreen() {
 
         <View style={styles.sectionRow}>
           <Text style={styles.nearbyTitle}>Nearby Printers</Text>
-          <Pressable onPress={() => router.push('/printers' as never)}>
-            <Text style={styles.seeAll}>See all</Text>
+          <Pressable onPress={() => router.push('/upload')}>
+            <Text style={styles.seeAll}>Find for my model</Text>
           </Pressable>
         </View>
 
@@ -160,7 +103,7 @@ export default function HomeScreen() {
           visible.slice(0, 4).map((printer) => (
             <Pressable
               key={printer.id}
-              onPress={() => router.push(`/printer/${printer.id}`)}
+              onPress={() => router.push('/upload')}
               style={({ pressed }) => [styles.printerCard, pressed && styles.pressed]}
             >
               <View style={styles.printerIcon}>

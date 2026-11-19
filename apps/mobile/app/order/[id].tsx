@@ -1,162 +1,118 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import {
-  AppHeader,
-  ErrorView,
-  LoadingView,
-  ProgressBar,
-  Screen,
-} from '../../components/ui';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ModelViewer } from '../../components/ModelViewer';
+import { AppHeader, ErrorView, LoadingView, ProgressBar, Screen, StatusPill } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
+import { resolveViewerSource } from '../../lib/model-preview';
+import { useMarketplaceOrder } from '../../lib/marketplace-hooks';
+import type { ModelDetails } from '../../lib/marketplace-types';
 import { formatMoney, STATUS_LABELS } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
 import { colors, radius, shadow } from '../../lib/theme';
-import type { Order, OrderStatus } from '../../lib/types';
+import type { OrderStatus } from '../../lib/types';
 
-const STAGES: OrderStatus[] = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
+const STAGES: OrderStatus[] = ['PENDING_ACCEPTANCE', 'CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
 
-function eventTime(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  if (sameDay) return `Today, ${time}`;
-  return `${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}, ${time}`;
-}
-
-function remainingLabel(eta: string | null) {
-  if (!eta) return '—';
+function etaLabel(eta: string | null) {
+  if (!eta) return 'Provider to confirm';
   const date = new Date(eta);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return 'Provider to confirm';
   const minutes = Math.max(0, Math.round((date.getTime() - Date.now()) / 60000));
-  if (minutes === 0) return 'Any moment';
-  if (minutes < 90) return `${minutes} Mins`;
-  const hours = Math.round(minutes / 60);
-  return `${hours} Hrs`;
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.round(minutes / 60)} hr`;
 }
 
 export default function OrderTrackingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { order, loading, error } = useMarketplaceOrder(id);
+  const [model, setModel] = useState<ModelDetails | null>(null);
+  const [modelError, setModelError] = useState('');
+  const [viewerInteracting, setViewerInteracting] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError('');
-    try {
-      setOrder((await api.getOrder(id)).order);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load order');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  useEffect(() => {
+    let active = true;
+    if (!order?.modelId) return;
+    api.getModel(order.modelId).then((result) => {
+      if (active) setModel(result);
+    }).catch((err) => {
+      if (active) setModelError(err instanceof Error ? err.message : 'Could not load the model preview.');
+    });
+    return () => { active = false; };
+  }, [order?.modelId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load]),
-  );
-
-  const progress = useMemo(() => {
-    if (!order) return 0;
-    if (order.status === 'READY_FOR_PICKUP') return 100;
-    return Math.max(0, Math.min(100, Math.round(order.progress)));
-  }, [order]);
-
-  if (loading) {
-    return (
-      <Screen>
-        <AppHeader back />
-        <LoadingView label="Loading order…" />
-      </Screen>
-    );
+  if (loading && !order) {
+    return <Screen><AppHeader back /><LoadingView label="Loading order…" /></Screen>;
   }
-
-  if (error || !order) {
-    return (
-      <Screen>
-        <AppHeader back />
-        <ErrorView message={error || 'Order not found'} onRetry={() => void load()} />
-      </Screen>
-    );
+  if (error && !order) {
+    return <Screen><AppHeader back /><ErrorView message={error} onRetry={() => router.replace(`/order/${id}`)} /></Screen>;
   }
+  if (!order) return <Screen><AppHeader back /><ErrorView message="Order not found." onRetry={() => router.replace('/orders')} /></Screen>;
 
   const currentIndex = STAGES.indexOf(order.status);
-  const printer = order.printers;
-  const title = printer?.name || `Order #${order.order_number}`;
-  const events = order.order_status_events || [];
-
+  const progress = order.status === 'READY_FOR_PICKUP' ? 100 : Math.max(0, Math.min(100, order.progress));
+  const preview = model ? resolveViewerSource(model) : null;
   const openDirections = () => {
-    if (printer && printer.lat && printer.lng) {
-      void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${printer.lat},${printer.lng}`);
-    } else if (printer?.location_details) {
-      void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(printer.location_details)}`);
-    }
+    const providerName = order.printers?.name ?? '3D printing provider';
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(providerName)}`;
+    void Linking.openURL(url);
   };
-
-  const contactPrinter = () => {
-    const phone = printer?.contact_info?.phone;
-    const email = printer?.contact_info?.email;
-    if (phone) void Linking.openURL(`tel:${phone}`);
-    else if (email) void Linking.openURL(`mailto:${email}`);
+  const contactProvider = () => {
+    Alert.alert('Contact provider', 'Provider contact details are not available in this order yet.');
   };
 
   return (
     <Screen>
       <AppHeader back />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Order Tracking</Text>
-
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!viewerInteracting}
+      >
+        <Text style={styles.title}>Order tracking</Text>
         <View style={styles.summary}>
           <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
-          <Text style={styles.objectName} numberOfLines={1}>{title}</Text>
-          <Text style={styles.meta}>
-            {[printer?.name, order.material, order.color].filter(Boolean).join(' • ')}
-          </Text>
-          <Text style={styles.meta}>Total {formatMoney(order.price_snapshot)}</Text>
+          <Text style={styles.provider}>{order.printers?.name ?? 'Your provider'}</Text>
+          <StatusPill label={STATUS_LABELS[order.status] ?? order.status} tone={order.status === 'DECLINED' || order.status === 'CANCELLED' ? 'info' : 'queued'} />
+          <Text style={styles.meta}>{order.material} · {order.quality} · Qty {order.quantity}</Text>
+          <Text style={styles.meta}>Estimate · {formatMoney(order.price_snapshot)}</Text>
+          {error ? <Text accessibilityRole="alert" style={styles.pollError}>Could not refresh: {error}</Text> : null}
         </View>
+
+        {preview ? (
+          <View style={styles.viewer}>
+            <ModelViewer
+              url={preview.url}
+              format={preview.format}
+              progress={progress}
+              buildVolume={order.printers?.build_volume ?? undefined}
+              onInteractionChange={setViewerInteracting}
+            />
+          </View>
+        ) : null}
+        {preview ? <Text style={styles.viewerHint}>Drag to rotate · two fingers to move or zoom</Text> : null}
+        {modelError ? <Text accessibilityRole="alert" style={styles.pollError}>{modelError}</Text> : null}
 
         <View style={styles.timeline}>
           {STAGES.map((stage, index) => {
-            const event = events.find((item) => item.status === stage);
-            const isLast = index === STAGES.length - 1;
-            const done = currentIndex > index || (order.status === 'READY_FOR_PICKUP' && index < STAGES.length);
-            const current = currentIndex === index && order.status !== 'READY_FOR_PICKUP';
-            const printing = stage === 'PRINTING' && current;
-
-            let tone: string = colors.queued;
-            if (done) tone = colors.success;
-            if (printing) tone = colors.printing;
-
-            let timestamp = 'Not started';
-            if (stage === 'CONFIRMED') timestamp = eventTime(event?.created_at ?? order.created_at) ?? 'Not started';
-            else if (event) timestamp = eventTime(event.created_at) ?? 'Not started';
-            if (printing) timestamp = `Started ${eventTime(event?.created_at) ?? 'now'} · ${progress}%`;
-
+            const done = currentIndex > index || order.status === 'READY_FOR_PICKUP' && index < STAGES.length - 1;
+            const current = currentIndex === index;
+            const color = done ? colors.success : current ? colors.printing : colors.queued;
             return (
               <View key={stage} style={styles.step}>
                 <View style={styles.rail}>
-                  <View style={[styles.dot, { backgroundColor: tone }]}>
-                    {done ? <Icon name={icons.check} size={14} color={colors.text} /> : null}
-                    {printing ? <Icon name={icons.printer} size={12} color="#FFFFFF" /> : null}
+                  <View style={[styles.dot, { backgroundColor: color }]}>
+                    {done ? <Icon name={icons.check} size={13} color={colors.text} /> : null}
                   </View>
-                  {isLast ? null : (
-                    <View style={[styles.line, { backgroundColor: done ? colors.success : colors.border }]} />
-                  )}
+                  {index < STAGES.length - 1 ? <View style={[styles.line, done && styles.lineDone]} /> : null}
                 </View>
                 <View style={styles.stepCopy}>
                   <Text style={[styles.stepTitle, (done || current) && styles.stepTitleActive]}>
                     {STATUS_LABELS[stage]}
                   </Text>
-                  <Text style={styles.stepTime}>{timestamp}</Text>
+                  {current ? <Text style={styles.stepDetail}>Current status</Text> : null}
                 </View>
               </View>
             );
@@ -165,35 +121,25 @@ export default function OrderTrackingScreen() {
 
         <View style={styles.progressCard}>
           <View style={styles.progressRow}>
-            <Text style={styles.progressLabel}>Printing Progress</Text>
+            <Text style={styles.progressLabel}>Build progress</Text>
             <Text style={styles.progressValue}>{progress}%</Text>
           </View>
-          <ProgressBar value={progress} height={14} />
+          <ProgressBar value={progress} height={12} />
         </View>
 
         <View style={styles.etaCard}>
-          <View style={styles.etaThumb}>
-            <Text style={styles.etaMinutes}>{remainingLabel(order.eta)}</Text>
-          </View>
-          <Text style={styles.etaLabel}>Estimated Time Remaining</Text>
+          <View style={styles.etaThumb}><Text style={styles.etaValue}>{etaLabel(order.eta)}</Text></View>
+          <Text style={styles.etaLabel}>Estimated ready time</Text>
         </View>
 
         <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={openDirections}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-          >
+          <Pressable accessibilityRole="button" onPress={openDirections} style={styles.action}>
             <Icon name={icons.pin} size={20} color={colors.text} />
-            <Text style={styles.actionLabel}>Get Directions</Text>
+            <Text style={styles.actionLabel}>Directions</Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={contactPrinter}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-          >
+          <Pressable accessibilityRole="button" onPress={contactProvider} style={styles.action}>
             <Icon name={icons.phone} size={20} color={colors.text} />
-            <Text style={styles.actionLabel}>Contact Printer</Text>
+            <Text style={styles.actionLabel}>Contact provider</Text>
           </Pressable>
         </View>
 
@@ -206,73 +152,35 @@ export default function OrderTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 15, paddingTop: 16, paddingBottom: 32, gap: 16 },
-  pressed: { opacity: 0.85 },
-  title: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-
-  summary: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 4,
-  },
-  orderNumber: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  objectName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  meta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
-
+  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, gap: 16 },
+  title: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
+  summary: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, gap: 5 },
+  orderNumber: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
+  provider: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
+  meta: { fontFamily: fonts.regular, fontSize: 13, color: colors.text },
+  pollError: { fontFamily: fonts.regular, fontSize: 12, color: colors.danger },
+  viewer: { height: 320, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.bg },
+  viewerHint: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, textAlign: 'center', marginTop: -8 },
   timeline: { paddingHorizontal: 10, paddingVertical: 8 },
-  step: { flexDirection: 'row', gap: 16 },
+  step: { flexDirection: 'row', gap: 14 },
   rail: { width: 24, alignItems: 'center' },
-  dot: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  line: { width: 2, flex: 1, minHeight: 22, marginVertical: 2 },
-  stepCopy: { flex: 1, paddingBottom: 22, gap: 2 },
-  stepTitle: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.muted },
+  dot: { width: 23, height: 23, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  line: { width: 2, flex: 1, minHeight: 20, marginVertical: 2, backgroundColor: colors.border },
+  lineDone: { backgroundColor: colors.success },
+  stepCopy: { flex: 1, paddingBottom: 18 },
+  stepTitle: { fontFamily: fonts.regular, fontSize: 15, color: colors.muted },
   stepTitleActive: { fontFamily: fonts.semibold, color: colors.text },
-  stepTime: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-
-  progressCard: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 14, gap: 10 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressLabel: { fontFamily: fonts.light, fontSize: 14, lineHeight: 16.9, color: colors.text },
-  progressValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-
-  etaCard: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  etaThumb: {
-    width: 69,
-    height: 69,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.raised,
-  },
-  etaMinutes: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24.2, color: colors.text, textAlign: 'center' },
-  etaLabel: { flex: 1, fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-
-  actions: { flexDirection: 'row', gap: 14 },
-  action: {
-    flex: 1,
-    minHeight: 71,
-    borderRadius: radius.md,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-  },
-  actionLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, textAlign: 'center' },
-
-  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link, textAlign: 'center' },
+  stepDetail: { marginTop: 3, fontFamily: fonts.regular, fontSize: 11, color: colors.link },
+  progressCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, gap: 10 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressLabel: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
+  progressValue: { fontFamily: fonts.bold, fontSize: 15, color: colors.text },
+  etaCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  etaThumb: { minWidth: 70, height: 62, paddingHorizontal: 8, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
+  etaValue: { fontFamily: fonts.bold, fontSize: 16, color: colors.text, textAlign: 'center' },
+  etaLabel: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  actions: { flexDirection: 'row', gap: 12 },
+  action: { flex: 1, minHeight: 66, borderRadius: radius.md, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center', gap: 5, padding: 8 },
+  actionLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text, textAlign: 'center' },
+  link: { fontFamily: fonts.semibold, fontSize: 13, color: colors.link, textAlign: 'center' },
 });

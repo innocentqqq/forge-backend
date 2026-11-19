@@ -23,7 +23,7 @@ export default function ProfileScreen() {
     try {
       const [nextProfile, nextStats] = await Promise.all([
         api.getProfile(),
-        api.getProfileStats().catch(() => null),
+        api.getProfileStats(),
       ]);
       setProfile(nextProfile);
       setStats(nextStats);

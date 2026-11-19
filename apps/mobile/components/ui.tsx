@@ -406,13 +406,14 @@ export function Radio({ selected, onPress }: { selected: boolean; onPress?: () =
 
 /* --------------------------------------------------------------- data bits */
 
-type StatusTone = 'active' | 'queued' | 'done' | 'info';
+type StatusTone = 'active' | 'queued' | 'done' | 'info' | 'danger';
 
 const dotColors: Record<StatusTone, string> = {
   active: colors.printing,
   queued: colors.queued,
   done: colors.success,
   info: colors.link,
+  danger: colors.danger,
 };
 
 export function StatusPill({ label, tone = 'active' }: { label: string; tone?: StatusTone }) {
