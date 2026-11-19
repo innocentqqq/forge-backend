@@ -2,7 +2,7 @@
   "name": "forge",
   "version": "0.2.0",
   "private": true,
-  "description": "Forge — 3D printing marketplace: Expo app, Node API, and shared types",
+  "description": "Forge \u2014 3D printing marketplace: Expo app, Node API, and shared types",
   "engines": {
     "node": ">=22"
   },
@@ -23,6 +23,7 @@
     "test": "npm run test -w @forge/api",
     "format": "npm run format -w @forge/api",
     "format:check": "npm run format:check -w @forge/api",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run test:rls",
+    "test:rls": "npm run test:rls -w @forge/api"
   }
 }
