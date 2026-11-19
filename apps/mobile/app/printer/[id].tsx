@@ -18,7 +18,8 @@ import {
 import { api, estimatePrice } from '../../lib/api';
 import { formatMoney } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
-import { colors, radius, shadow } from '../../lib/theme';
+import { colors, radius } from '../../lib/theme';
+import { ForgeMap } from '../../components/ForgeMap';
 import { MATERIALS, QUALITIES, type Material, type Printer, type Quality } from '../../lib/types';
 
 export default function PrinterDetailScreen() {
@@ -113,7 +114,7 @@ export default function PrinterDetailScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back title="Printer" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <PageTitle>{printer.name}</PageTitle>
         <Text style={styles.location}>{printer.location_details ?? 'Pickup details unavailable'}</Text>
@@ -123,6 +124,22 @@ export default function PrinterDetailScreen() {
           <Stat label="ETA" value={`${Number(printer.est_completion_hours_per_unit).toFixed(1)} h`} />
           <Stat label="Printers" value={String(printer.printer_count)} />
         </View>
+
+        {Number.isFinite(Number(printer.lat)) && Number.isFinite(Number(printer.lng)) ? (
+          <ForgeMap
+            height={180}
+            zoom={15}
+            markers={[
+              {
+                id: printer.id,
+                coords: { lat: Number(printer.lat), lng: Number(printer.lng) },
+                title: printer.name,
+                subtitle: printer.location_details ?? undefined,
+              },
+            ]}
+            selectedId={printer.id}
+          />
+        ) : null}
 
         {printer.contact_info?.phone || printer.contact_info?.email ? (
           <Card>
@@ -149,7 +166,7 @@ export default function PrinterDetailScreen() {
             <Label>Material</Label>
             <View style={styles.chips}>
               {MATERIALS.map((option) => (
-                <Chip key={option} label={option} active={material === option} onPress={() => setMaterial(option)} />
+                <Chip compact key={option} label={option} active={material === option} onPress={() => setMaterial(option)} />
               ))}
             </View>
           </View>
@@ -159,6 +176,7 @@ export default function PrinterDetailScreen() {
             <View style={styles.chips}>
               {QUALITIES.map((option) => (
                 <Chip
+                  compact
                   key={option}
                   label={option[0] + option.slice(1).toLowerCase()}
                   active={quality === option}
@@ -205,16 +223,15 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
+  content: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, gap: 16 },
   location: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted, marginTop: -8 },
 
   summary: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surfaceSubtle,
     borderRadius: radius.md,
     padding: 14,
     flexDirection: 'row',
     gap: 12,
-    ...shadow.card,
   },
   stat: { flex: 1, gap: 2 },
   statValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },

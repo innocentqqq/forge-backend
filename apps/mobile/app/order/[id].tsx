@@ -7,12 +7,14 @@ import {
   LoadingView,
   ProgressBar,
   Screen,
+  StatusPill,
 } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
+import { ForgeMap } from '../../components/ForgeMap';
 import { api } from '../../lib/api';
 import { formatMoney, STATUS_LABELS } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
-import { colors, radius, shadow } from '../../lib/theme';
+import { colors, outlined, radius } from '../../lib/theme';
 import type { Order, OrderStatus } from '../../lib/types';
 
 const STAGES: OrderStatus[] = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
@@ -38,6 +40,17 @@ function remainingLabel(eta: string | null) {
   const hours = Math.round(minutes / 60);
   return `${hours} Hrs`;
 }
+
+function pillTone(status: OrderStatus) {
+  if (status === 'PRINTING') return 'active' as const;
+  if (status === 'READY_FOR_PICKUP') return 'done' as const;
+  return 'queued' as const;
+}
+
+const STEP_LABELS: Partial<Record<OrderStatus, string>> = {
+  IN_QUEUE: 'In Print Queue',
+  READY_FOR_PICKUP: 'Ready for Pickup',
+};
 
 export default function OrderTrackingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -74,7 +87,7 @@ export default function OrderTrackingScreen() {
   if (loading) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back title="Order Tracking" />
         <LoadingView label="Loading order…" />
       </Screen>
     );
@@ -83,7 +96,7 @@ export default function OrderTrackingScreen() {
   if (error || !order) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back title="Order Tracking" />
         <ErrorView message={error || 'Order not found'} onRetry={() => void load()} />
       </Screen>
     );
@@ -111,50 +124,47 @@ export default function OrderTrackingScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader
+        back
+        title="Order Tracking"
+        right={<StatusPill label={STATUS_LABELS[order.status] ?? order.status} tone={pillTone(order.status)} />}
+      />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Order Tracking</Text>
-
-        <View style={styles.summary}>
-          <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
-          <Text style={styles.objectName} numberOfLines={1}>{title}</Text>
+        <View style={styles.card}>
+          <View style={styles.orderTop}>
+            <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
+            <Text style={styles.total}>{formatMoney(order.price_snapshot)}</Text>
+          </View>
+          <Text style={styles.fileName} numberOfLines={1}>{title}</Text>
           <Text style={styles.meta}>
-            {[printer?.name, order.material, order.color].filter(Boolean).join(' • ')}
+            {[printer?.name, order.material, order.color, `Qty ${order.quantity}`].filter(Boolean).join(' · ')}
           </Text>
-          <Text style={styles.meta}>Total {formatMoney(order.price_snapshot)}</Text>
         </View>
 
-        <View style={styles.timeline}>
+        <View style={[styles.card, styles.timelineCard]}>
           {STAGES.map((stage, index) => {
             const event = events.find((item) => item.status === stage);
             const isLast = index === STAGES.length - 1;
-            const done = currentIndex > index || (order.status === 'READY_FOR_PICKUP' && index < STAGES.length);
+            const done = currentIndex > index || order.status === 'READY_FOR_PICKUP';
             const current = currentIndex === index && order.status !== 'READY_FOR_PICKUP';
-            const printing = stage === 'PRINTING' && current;
-
-            let tone: string = colors.queued;
-            if (done) tone = colors.success;
-            if (printing) tone = colors.printing;
 
             let timestamp = 'Not started';
             if (stage === 'CONFIRMED') timestamp = eventTime(event?.created_at ?? order.created_at) ?? 'Not started';
             else if (event) timestamp = eventTime(event.created_at) ?? 'Not started';
-            if (printing) timestamp = `Started ${eventTime(event?.created_at) ?? 'now'} · ${progress}%`;
+            if (stage === 'PRINTING' && current) timestamp = `In progress… ${progress}%`;
+            if (stage === 'READY_FOR_PICKUP' && !done) timestamp = 'Waiting for printer';
 
             return (
               <View key={stage} style={styles.step}>
                 <View style={styles.rail}>
-                  <View style={[styles.dot, { backgroundColor: tone }]}>
-                    {done ? <Icon name={icons.check} size={14} color={colors.text} /> : null}
-                    {printing ? <Icon name={icons.printer} size={12} color="#FFFFFF" /> : null}
+                  <View style={[styles.dot, done && styles.dotDone, current && styles.dotCurrent]}>
+                    {done ? <Icon name={icons.check} size={10} color="#FFFFFF" /> : null}
                   </View>
-                  {isLast ? null : (
-                    <View style={[styles.line, { backgroundColor: done ? colors.success : colors.border }]} />
-                  )}
+                  {isLast ? null : <View style={[styles.line, done && styles.lineDone]} />}
                 </View>
-                <View style={styles.stepCopy}>
+                <View style={styles.stepBody}>
                   <Text style={[styles.stepTitle, (done || current) && styles.stepTitleActive]}>
-                    {STATUS_LABELS[stage]}
+                    {STEP_LABELS[stage] ?? STATUS_LABELS[stage]}
                   </Text>
                   <Text style={styles.stepTime}>{timestamp}</Text>
                 </View>
@@ -164,36 +174,55 @@ export default function OrderTrackingScreen() {
         </View>
 
         <View style={styles.progressCard}>
-          <View style={styles.progressRow}>
+          <View style={styles.progressTop}>
             <Text style={styles.progressLabel}>Printing Progress</Text>
-            <Text style={styles.progressValue}>{progress}%</Text>
+            <Text style={styles.progressPct}>{progress}%</Text>
           </View>
-          <ProgressBar value={progress} height={14} />
+          <ProgressBar value={progress} height={10} />
+          <View style={styles.etaRow}>
+            <Text style={styles.eta}>{remainingLabel(order.eta).toLowerCase()}</Text>
+            <Text style={styles.etaLabel}>Estimated Time Remaining</Text>
+          </View>
         </View>
 
-        <View style={styles.etaCard}>
-          <View style={styles.etaThumb}>
-            <Text style={styles.etaMinutes}>{remainingLabel(order.eta)}</Text>
+        <Text style={styles.section}>Pickup</Text>
+        <View style={[styles.card, styles.pickupCard]}>
+          <View style={styles.pickupIcon}>
+            <Icon name={icons.pin} size={18} color={colors.accent} />
           </View>
-          <Text style={styles.etaLabel}>Estimated Time Remaining</Text>
+          <View style={styles.pickupBody}>
+            <Text style={styles.pickupName}>{printer?.name ?? 'Your printer'}</Text>
+            {printer?.location_details ? <Text style={styles.meta}>{printer.location_details}</Text> : null}
+          </View>
+          {printer?.distance_km != null ? (
+            <Text style={styles.distance}>{Number(printer.distance_km).toFixed(1)} km</Text>
+          ) : null}
         </View>
+
+        {printer && Number.isFinite(Number(printer.lat)) && Number.isFinite(Number(printer.lng)) ? (
+          <ForgeMap
+            height={170}
+            zoom={15}
+            style={styles.map}
+            markers={[
+              {
+                id: printer.id,
+                coords: { lat: Number(printer.lat), lng: Number(printer.lng) },
+                title: printer.name,
+                subtitle: printer.location_details ?? undefined,
+              },
+            ]}
+            selectedId={printer.id}
+          />
+        ) : null}
 
         <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={openDirections}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-          >
-            <Icon name={icons.pin} size={20} color={colors.text} />
+          <Pressable accessibilityRole="button" onPress={openDirections} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
             <Text style={styles.actionLabel}>Get Directions</Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={contactPrinter}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-          >
-            <Icon name={icons.phone} size={20} color={colors.text} />
-            <Text style={styles.actionLabel}>Contact Printer</Text>
+          <Pressable accessibilityRole="button" onPress={contactPrinter} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+            <Icon name="chatbox-outline" size={15} color={colors.text} />
+            <Text style={styles.actionLabelPlain}>Contact Printer</Text>
           </Pressable>
         </View>
 
@@ -206,73 +235,69 @@ export default function OrderTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 15, paddingTop: 16, paddingBottom: 32, gap: 16 },
+  content: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 32 },
   pressed: { opacity: 0.85 },
-  title: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
 
-  summary: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 4,
-  },
-  orderNumber: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  objectName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  meta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  card: { ...outlined, padding: 16 },
+  orderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  orderNumber: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  total: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 17, color: colors.text },
+  fileName: { fontFamily: fonts.bold, fontSize: 18, lineHeight: 22, color: colors.text },
+  meta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted, marginTop: 3 },
 
-  timeline: { paddingHorizontal: 10, paddingVertical: 8 },
-  step: { flexDirection: 'row', gap: 16 },
-  rail: { width: 24, alignItems: 'center' },
+  timelineCard: { marginTop: 14, paddingVertical: 8 },
+  step: { flexDirection: 'row', gap: 14 },
+  rail: { alignItems: 'center', width: 20 },
   dot: {
-    width: 24,
-    height: 24,
+    width: 18,
+    height: 18,
     borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 12,
   },
-  line: { width: 2, flex: 1, minHeight: 22, marginVertical: 2 },
-  stepCopy: { flex: 1, paddingBottom: 22, gap: 2 },
+  dotDone: { backgroundColor: colors.accent, borderColor: colors.accent },
+  dotCurrent: { borderColor: colors.accent, borderWidth: 3 },
+  line: { flex: 1, width: 2, backgroundColor: colors.hairline, minHeight: 26 },
+  lineDone: { backgroundColor: colors.accent },
+  stepBody: { flex: 1, paddingVertical: 10, gap: 2 },
   stepTitle: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.muted },
   stepTitleActive: { fontFamily: fonts.semibold, color: colors.text },
-  stepTime: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  stepTime: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
 
-  progressCard: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 14, gap: 10 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressLabel: { fontFamily: fonts.light, fontSize: 14, lineHeight: 16.9, color: colors.text },
-  progressValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  progressCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 16, marginTop: 14 },
+  progressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  progressLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  progressPct: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  etaRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 14 },
+  eta: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 29, color: colors.text },
+  etaLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.muted },
 
-  etaCard: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  etaThumb: {
-    width: 69,
-    height: 69,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.raised,
-  },
-  etaMinutes: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24.2, color: colors.text, textAlign: 'center' },
-  etaLabel: { flex: 1, fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  section: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 20, marginBottom: 8 },
+  pickupCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  pickupIcon: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: colors.surfaceSubtle, alignItems: 'center', justifyContent: 'center' },
+  pickupBody: { flex: 1 },
+  pickupName: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 17, color: colors.text },
+  distance: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 14.5, color: colors.muted },
 
-  actions: { flexDirection: 'row', gap: 14 },
+  map: { marginTop: 12 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 16, marginBottom: 16 },
   action: {
     flex: 1,
-    minHeight: 71,
-    borderRadius: radius.md,
-    backgroundColor: colors.accentSoft,
+    height: 52,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 8,
   },
-  actionLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, textAlign: 'center' },
+  actionLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  actionLabelPlain: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
 
   link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link, textAlign: 'center' },
 });

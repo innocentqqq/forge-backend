@@ -6,11 +6,11 @@ import { AppHeader, Screen } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
+import { useUserLocation } from '../../lib/location';
 import { fonts } from '../../lib/fonts';
-import { colors, radius } from '../../lib/theme';
+import { colors, outlined, radius } from '../../lib/theme';
 import type { Printer } from '../../lib/types';
 
-const LOCATION = { lat: 13.8708, lng: 100.6053 };
 type PickedFile = { name: string; uri?: string; mimeType?: string; size?: number; file?: unknown };
 type PickerModule = { getDocumentAsync: (options: { type: string[]; copyToCacheDirectory: boolean; multiple: boolean }) => Promise<{ canceled: boolean; assets?: PickedFile[] }> };
 
@@ -29,17 +29,19 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const userLocation = useUserLocation();
 
   const load = useCallback(async (refresh = false) => {
+    if (!userLocation) return; // wait for the location answer (or fallback) first
     if (refresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
-      const result = await api.getPrinters({ ...LOCATION, sort: 'nearest' });
+      const result = await api.getPrinters({ ...userLocation.coords, sort: 'nearest' });
       setPrinters(result.printers);
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not load nearby printers'); }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  }, [userLocation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,13 +105,13 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.accent} />}
       >
-        <View style={styles.searchBox}>
-          <Icon name={icons.search} size={24} color={colors.text} />
+        <View style={styles.search}>
+          <Icon name={icons.search} size={18} color={colors.muted} />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search for printers, materials"
-            placeholderTextColor={colors.text}
+            placeholderTextColor={colors.muted}
             style={styles.searchInput}
             returnKeyType="search"
             onSubmitEditing={() => router.push({ pathname: '/printers' as never, params: { q: search } })}
@@ -121,129 +123,147 @@ export default function HomeScreen() {
           disabled={uploading}
           style={({ pressed }) => [styles.upload, pressed && styles.pressed]}
         >
-          <Icon name={icons.box} size={32} color={colors.text} />
-          <Text style={styles.uploadTitle}>{uploading ? 'Uploading design…' : 'Upload Your 3D Design'}</Text>
-          <Text style={styles.uploadHint}>STL, 3MF, OBJ supported</Text>
+          <View style={styles.uploadIcon}>
+            <Icon name={icons.upload} size={24} color={colors.accent} />
+          </View>
+          <View style={styles.uploadText}>
+            <Text style={styles.uploadTitle}>{uploading ? 'Uploading design…' : 'Upload Your 3D Design'}</Text>
+            <Text style={styles.uploadSub}>STL, 3MF, OBJ supported</Text>
+          </View>
+          <Icon name="arrow-forward" size={20} color={colors.muted} />
         </Pressable>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-
-        <View style={styles.actions}>
-          <Pressable onPress={() => void chooseDesign()} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}>
-            <Icon name={icons.cube} size={38} color={colors.text} />
-            <View style={styles.actionCopy}>
-              <Text style={styles.actionTitle}>New Order</Text>
-              <Text style={styles.actionSubtitle}>Start Fresh</Text>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickRow}>
+          <Pressable onPress={() => void chooseDesign()} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: colors.accent }]}>
+              <Icon name={icons.plus} size={18} color="#FFFFFF" />
             </View>
+            <Text style={styles.quickTitle}>New Order</Text>
+            <Text style={styles.quickSub}>Start Fresh</Text>
           </Pressable>
-          <Pressable onPress={() => router.push('/orders')} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}>
-            <Icon name={icons.box} size={38} color={colors.text} />
-            <View style={styles.actionCopy}>
-              <Text style={styles.actionTitle}>My Orders</Text>
-              <Text style={styles.actionSubtitle}>Track Prints</Text>
+          <Pressable onPress={() => router.push('/orders')} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+            <View style={[styles.quickIcon, { backgroundColor: colors.surfaceSubtle }]}>
+              <Icon name="clipboard-outline" size={18} color={colors.accent} />
             </View>
+            <Text style={styles.quickTitle}>My Orders</Text>
+            <Text style={styles.quickSub}>Track Prints</Text>
           </Pressable>
         </View>
 
         <View style={styles.sectionRow}>
-          <Text style={styles.nearbyTitle}>Nearby Printers</Text>
-          <Pressable onPress={() => router.push('/printers' as never)}>
+          <Text style={styles.sectionTitle}>Nearby Printers</Text>
+          <Pressable onPress={() => router.push('/printers' as never)} hitSlop={8}>
             <Text style={styles.seeAll}>See all</Text>
           </Pressable>
         </View>
 
-        {loading ? (
-          <Text style={styles.empty}>Finding nearby printers…</Text>
-        ) : (
-          visible.slice(0, 4).map((printer) => (
-            <Pressable
-              key={printer.id}
-              onPress={() => router.push(`/printer/${printer.id}`)}
-              style={({ pressed }) => [styles.printerCard, pressed && styles.pressed]}
-            >
-              <View style={styles.printerIcon}>
-                <Icon name={icons.university} size={24} color={colors.text} />
-              </View>
-              <View style={styles.printerDetails}>
-                <Text style={styles.printerName}>{printer.name}</Text>
-                <Text style={styles.printerMeta}>
-                  {printer.distance_km !== null ? `${printer.distance_km.toFixed(1)} km away` : 'Nearby'} . {printer.printer_count} printers available
-                </Text>
-              </View>
-            </Pressable>
-          ))
-        )}
-
-        {!loading && visible.length === 0 ? <Text style={styles.empty}>No printers are available yet.</Text> : null}
-        <View style={{ height: 96 }} />
+        <View style={styles.list}>
+          {loading ? (
+            <Text style={styles.empty}>Finding nearby printers…</Text>
+          ) : (
+            visible.slice(0, 4).map((printer) => (
+              <Pressable
+                key={printer.id}
+                onPress={() => router.push(`/printer/${printer.id}`)}
+                style={({ pressed }) => [styles.provider, pressed && styles.pressed]}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initialFor(printer.name)}</Text>
+                </View>
+                <View style={styles.providerBody}>
+                  <Text style={styles.providerName} numberOfLines={1}>
+                    {printer.name}
+                  </Text>
+                  <View style={styles.providerMeta}>
+                    <Icon name={icons.pin} size={11} color={colors.muted} />
+                    <Text style={styles.providerMetaText}>
+                      {printer.distance_km !== null ? `${printer.distance_km.toFixed(1)} km away` : 'Nearby'} ·{' '}
+                      {printer.printer_count} {printer.printer_count === 1 ? 'printer' : 'printers'} available
+                    </Text>
+                  </View>
+                  {printer.location_details ? (
+                    <Text style={styles.providerPlace} numberOfLines={1}>
+                      {printer.location_details}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            ))
+          )}
+          {!loading && visible.length === 0 ? <Text style={styles.empty}>No printers are available yet.</Text> : null}
+        </View>
+        <View style={{ height: 110 }} />
       </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { paddingHorizontal: 16, paddingBottom: 8, gap: 16 },
-  pressed: { opacity: 0.85 },
+/** "Krirk University Lab A" -> "A"; anything else -> first letter. */
+function initialFor(name: string) {
+  const trimmed = name.trim();
+  if (/\bLab [A-Z0-9]$/i.test(trimmed)) return trimmed.slice(-1).toUpperCase();
+  return (trimmed[0] ?? '?').toUpperCase();
+}
 
-  searchBox: {
-    height: 41,
+const styles = StyleSheet.create({
+  content: { paddingHorizontal: 24, paddingBottom: 12 },
+  pressed: { opacity: 0.75 },
+
+  search: {
+    height: 52,
     borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 9,
-    gap: 16,
+    gap: 10,
+    paddingHorizontal: 14,
   },
-  searchInput: { flex: 1, fontFamily: fonts.light, fontSize: 16, lineHeight: 19.4, color: colors.text, padding: 0 },
+  searchInput: { flex: 1, fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.text, padding: 0 },
 
   upload: {
-    height: 149,
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  uploadTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text, textAlign: 'center' },
-  uploadHint: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.text },
-
-  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.danger },
-
-  quickActionsTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  nearbyTitle: { fontFamily: fonts.extrabold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  seeAll: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.text },
-
-  actions: { flexDirection: 'row', gap: 12 },
-  actionCard: {
-    flex: 1,
-    height: 84,
-    padding: 12,
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.sm,
+    marginTop: 20,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    backgroundColor: colors.surfaceSubtle,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 14,
   },
-  actionCopy: { flex: 1, gap: 14 },
-  actionTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  actionSubtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  uploadIcon: { width: 46, height: 46, borderRadius: radius.sm, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  uploadText: { flex: 1, gap: 3 },
+  uploadTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  uploadSub: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.muted },
 
-  printerCard: {
-    height: 74,
-    padding: 10,
-    borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  printerIcon: { width: 60, height: 48, borderRadius: radius.sm, backgroundColor: '#AABCF2', alignItems: 'center', justifyContent: 'center' },
-  printerDetails: { flex: 1, gap: 4 },
-  printerName: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  printerMeta: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.text },
+  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.danger, marginTop: 12 },
+
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 24 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  seeAll: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link, marginTop: 24 },
+
+  quickRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  quickCard: { ...outlined, flex: 1, padding: 14, gap: 4, shadowOpacity: 0.06 },
+  quickIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  quickTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  quickSub: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+
+  list: { marginTop: 12, gap: 10 },
+  provider: { ...outlined, padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center', shadowOpacity: 0.03 },
+  avatar: { width: 52, height: 52, borderRadius: radius.sm, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
+  providerBody: { flex: 1, gap: 3 },
+  providerName: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  providerMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  providerMetaText: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
+  providerPlace: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
 
   empty: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted, paddingVertical: 16 },
 });
