@@ -2,8 +2,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader, Button, ErrorView, LoadingView, Screen } from '../components/ui';
+import { ProviderCard } from '../components/provider-card';
 import { api, USE_MOCK_API } from '../lib/api';
-import { formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
 import { colors, radius, shadow } from '../lib/theme';
 import { MATERIALS, QUALITIES, type Material, type Quality, type Sort } from '../lib/types';
@@ -142,35 +142,14 @@ export default function ProvidersScreen() {
               </View>
             </View>
             {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-            {providers.map((provider) => {
-              const isSelected = selectedId === provider.id;
-              return (
-                <Pressable
-                  key={provider.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected, disabled: !provider.fits }}
-                  disabled={!provider.fits}
-                  onPress={() => setSelectedId(provider.id)}
-                  style={[styles.card, isSelected && styles.cardSelected, !provider.fits && styles.cardDisabled]}
-                >
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.providerName}>{provider.displayName}</Text>
-                    <Text style={styles.price}>{formatMoney(provider.estimate)}</Text>
-                  </View>
-                  <Text style={styles.meta}>
-                    {provider.distanceKm === null ? 'Distance unavailable' : `${provider.distanceKm.toFixed(1)} km away`}
-                    {' · '}
-                    {provider.etaHours === null ? 'ETA unavailable' : `${provider.etaHours} hr estimate`}
-                  </Text>
-                  <Text style={styles.meta}>{provider.availability}</Text>
-                  {!provider.fits ? (
-                    <Text style={styles.doesNotFit}>
-                      Model doesn’t fit this printer’s {provider.buildVolume.x} × {provider.buildVolume.y} × {provider.buildVolume.z} mm build volume.
-                    </Text>
-                  ) : null}
-                </Pressable>
-              );
-            })}
+            {providers.map((provider) => (
+              <ProviderCard
+                key={provider.id}
+                provider={provider}
+                selected={selectedId === provider.id}
+                onPress={() => setSelectedId(provider.id)}
+              />
+            ))}
             {!loading && providers.length === 0 ? (
               <Text style={styles.empty}>No providers are available for this model and material.</Text>
             ) : null}

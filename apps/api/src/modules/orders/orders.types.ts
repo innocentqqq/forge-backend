@@ -65,10 +65,12 @@ export interface PrinterForOrder {
 
 export interface ProviderForOrder {
   id: string;
+  user_id?: string | null;
   type: 'LAB' | 'INDIVIDUAL';
   display_name: string;
   pickup_area: string;
   pickup_address: string;
+  exact_address?: string | null;
 }
 
 export interface OrderWithRelations extends OrderRow {

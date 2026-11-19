@@ -2,12 +2,10 @@ import { supabase } from './supabase';
 import type {
   CreateOrderInput,
   Material,
-  OnboardProviderInput,
   Order,
   Printer,
   Profile,
   ProfileStats,
-  Provider,
   Quality,
   Sort,
   UpdateProfileInput,
@@ -24,6 +22,17 @@ import type {
   ProviderSearchInput,
 } from './marketplace-types';
 import { inspectMockModel } from './mock-model';
+import {
+  emptyHours,
+  legacyPrinterFromProvider,
+  type MaterialRate,
+  type ProviderAgreements,
+  type ProviderPrinter,
+  type ProviderPrinterInput,
+  type ProviderProfile,
+  type ProviderSetup,
+  type ProviderSetupInput,
+} from './provider-onboarding';
 
 function inferBaseUrl(): string {
   const explicit = process.env.EXPO_PUBLIC_API_URL?.trim();
@@ -49,7 +58,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   auth?: boolean;
 }
@@ -125,8 +134,7 @@ const mockUploads = new Map<string, UploadSession>();
 const mockModels = new Map<string, ModelDetails>();
 const mockOrders = new Map<string, MarketplaceOrder>();
 const demoTimers = new Map<string, ReturnType<typeof setInterval>>();
-let mockProvider: Provider | null = null;
-let mockPrinters: Printer[] = [];
+let mockProvider: ProviderProfile | null = null;
 
 const mockProviders: ProviderResult[] = [
   {
@@ -163,6 +171,150 @@ const mockProviders: ProviderResult[] = [
 
 function mockId() {
   return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const EMPTY_AGREEMENTS: ProviderAgreements = {
+  liability: false,
+  paymentTerms: false,
+  prohibitedItems: false,
+  safePickup: false,
+};
+
+function mockSetup(
+  input: Pick<
+    ProviderSetupInput,
+    'type' | 'pickupArea' | 'printers' | 'printer' | 'rates' | 'agreements'
+  >,
+): ProviderSetup {
+  const printers = input.printers ?? [];
+  const hasPickupArea = Boolean(input.pickupArea.trim());
+  const hasActivePrinter = printers.some(
+    (printer) => printer.isActive !== false && printer.materials.length > 0,
+  ) || Boolean(input.printer);
+  const hasMaterialRate = Object.values(input.rates ?? {}).some(
+    (rate) => Boolean(rate) && rate.ratePerCm3 > 0,
+  ) || Boolean(input.printer?.pricePerCm3);
+  const agreements = input.agreements ?? EMPTY_AGREEMENTS;
+  const hasAgreements =
+    agreements.liability &&
+    agreements.paymentTerms &&
+    agreements.prohibitedItems &&
+    (input.type !== 'INDIVIDUAL' || agreements.safePickup);
+  const missing = [
+    ...(hasPickupArea ? [] : ['pickup area']),
+    ...(hasActivePrinter ? [] : ['active printer']),
+    ...(hasMaterialRate ? [] : ['material rate']),
+    ...(hasAgreements ? [] : ['agreements']),
+  ];
+  return {
+    canAppearInSearch: missing.length === 0,
+    missing,
+    hasPickupArea,
+    hasActivePrinter,
+    hasMaterialRate,
+    hasAgreements,
+  };
+}
+
+function mockRatesFromInput(input: ProviderSetupInput): Partial<Record<Material, MaterialRate>> {
+  const rates: Partial<Record<Material, MaterialRate>> = {};
+  for (const [material, rate] of Object.entries(input.rates ?? {})) {
+    if (!rate || rate.ratePerCm3 <= 0) continue;
+    rates[material as Material] = {
+      material: material as Material,
+      ratePerCm3: rate.ratePerCm3,
+      minimumOrder: rate.minimumOrder ?? 0,
+      colors: rate.colors ?? [],
+    };
+  }
+  if (input.printer) {
+    for (const material of input.printer.materials) {
+      rates[material] = {
+        material,
+        ratePerCm3: input.printer.pricePerCm3,
+        minimumOrder: input.printer.minimumOrder,
+        colors: [],
+      };
+    }
+  }
+  return rates;
+}
+
+function mockPrintersFromInput(input: ProviderSetupInput, now: string): ProviderPrinter[] {
+  const printers = input.printers ?? [];
+  const list = printers.length
+    ? printers
+    : input.printer
+      ? [{
+          name: input.printer.modelName,
+          modelName: input.printer.modelName,
+          buildVolume: input.printer.buildVolume,
+          materials: input.printer.materials,
+          isActive: true,
+        }]
+      : [];
+  const rates = mockRatesFromInput(input);
+  return list.map((printer, index) => ({
+    id: mockId() + `-printer-${index}`,
+    name: printer.name || printer.modelName || 'Printer',
+    modelName: printer.modelName || printer.name || 'Printer',
+    technology: 'FDM',
+    buildVolume: printer.buildVolume,
+    materials: printer.materials,
+    bestQuality: printer.bestQuality ?? 'STANDARD',
+    isActive: printer.isActive ?? true,
+    rates: printer.materials.flatMap((material) => {
+      const rate = rates[material];
+      return rate ? [rate] : [];
+    }),
+    createdAt: now,
+  }));
+}
+
+function mockProviderFromInput(input: ProviderSetupInput, existing?: ProviderProfile): ProviderProfile {
+  const now = new Date().toISOString();
+  const availability = input.availability ?? {};
+  const rates = mockRatesFromInput(input);
+  const printers = input.printers || input.printer ? mockPrintersFromInput(input, now) : existing?.printers ?? [];
+  const setupInput = { ...input, printers: input.printers ?? (input.printer ? printers : undefined) };
+  return {
+    id: existing?.id ?? 'provider-lab-north',
+    type: input.type,
+    displayName: input.displayName,
+    description: input.description ?? existing?.description ?? null,
+    bio: input.description ?? existing?.bio ?? null,
+    photoUrl: input.photoUrl ?? existing?.photoUrl ?? null,
+    pickupArea: input.pickupArea,
+    pickupAddress: input.pickupAddress,
+    exactAddress: input.exactAddress ?? existing?.exactAddress ?? null,
+    pickupInstructions: input.pickupInstructions ?? existing?.pickupInstructions ?? null,
+    contactPhone: input.contactPhone ?? existing?.contactPhone ?? null,
+    latitude: input.latitude ?? existing?.latitude ?? null,
+    longitude: input.longitude ?? existing?.longitude ?? null,
+    exactLatitude: input.exactLatitude ?? existing?.exactLatitude ?? null,
+    exactLongitude: input.exactLongitude ?? existing?.exactLongitude ?? null,
+    status: existing?.status ?? 'draft',
+    turnaroundDays: availability.turnaroundDays ?? existing?.turnaroundDays ?? 3,
+    maxActiveOrders: availability.maxActiveOrders ?? existing?.maxActiveOrders ?? 5,
+    agreements: input.agreements ?? existing?.agreements ?? EMPTY_AGREEMENTS,
+    availability: {
+      isOpen: availability.isOpen ?? existing?.availability.isOpen ?? true,
+      maxQueueSize: availability.maxQueueSize ?? existing?.availability.maxQueueSize ?? 10,
+      pickupHours: availability.pickupHours ?? existing?.availability.pickupHours ?? emptyHours(),
+    },
+    verification: existing?.verification ?? {
+      isVerified: false,
+      verifiedByAdmin: false,
+      emailVerifiedAt: null,
+      phoneVerifiedAt: null,
+    },
+    setup: mockSetup(setupInput as ProviderSetupInput),
+    printers,
+    hours: input.hours ?? existing?.hours ?? emptyHours(),
+    rates: Object.keys(rates).length ? rates : existing?.rates ?? {},
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
 }
 
 function formatFromName(fileName: string): ModelFormat {
@@ -579,86 +731,173 @@ export const api = {
       if (!mockProvider) throw new ApiError('PROVIDER_NOT_FOUND', 'No provider profile exists yet.', 404);
       return Promise.resolve(mockProvider);
     }
-    return request<Provider>('/providers/me');
+    return request<ProviderProfile>('/providers/me');
   },
 
   getMyPrinters() {
-    if (USE_MOCK_API) return Promise.resolve({ printers: mockPrinters });
-    // The marketplace returns each order's printer as part of the order, so the
-    // dashboard does not need a separate printer list endpoint in real mode.
-    return Promise.resolve({ printers: [] as Printer[] });
+    if (USE_MOCK_API) {
+      return Promise.resolve({
+        printers: (mockProvider?.printers ?? []).map((printer) =>
+          legacyPrinterFromProvider(printer, mockProvider?.pickupArea ?? ''),
+        ),
+      });
+    }
+    return request<{ printers: ProviderPrinter[] }>('/providers/me/printers').then((result) => ({
+      printers: result.printers.map((printer) => legacyPrinterFromProvider(printer, '')),
+    }));
   },
 
-  onboardProvider(input: OnboardProviderInput) {
+  getMyProviderPrinters() {
     if (USE_MOCK_API) {
-      const now = new Date().toISOString();
-      mockProvider = {
-        id: 'provider-lab-north',
-        type: input.type,
-        displayName: input.displayName,
-        bio: input.bio ?? null,
-        pickupArea: input.pickupArea,
-        pickupAddress: input.pickupAddress,
-        latitude: input.latitude ?? null,
-        longitude: input.longitude ?? null,
-        availability: {
-          isOpen: input.availability?.isOpen ?? true,
-          maxQueueSize: input.availability?.maxQueueSize ?? 10,
-          pickupHours: {},
-        },
-        verification: {
-          isVerified: false,
-          verifiedByAdmin: false,
-          emailVerifiedAt: null,
-          phoneVerifiedAt: null,
-        },
-        createdAt: now,
-        updatedAt: now,
-      };
-      mockPrinters = input.printer
-        ? [{
-            id: 'mock-printer',
-            name: input.printer.modelName,
-            lat: input.latitude ?? 0,
-            lng: input.longitude ?? 0,
-            printer_count: 1,
-            price_factor: 1,
-            est_completion_hours_per_unit: 24,
-            contact_info: null,
-            location_details: input.pickupArea,
-            created_at: now,
-            provider_id: mockProvider.id,
-            distance_km: null,
-            model_name: input.printer.modelName,
-            build_volume: input.printer.buildVolume,
-            materials: input.printer.materials,
-            price_per_cm3: input.printer.pricePerCm3,
-            minimum_order: input.printer.minimumOrder,
-          }]
-        : [];
+      return Promise.resolve({ printers: mockProvider?.printers ?? [] });
+    }
+    return request<{ printers: ProviderPrinter[] }>('/providers/me/printers');
+  },
+
+  onboardProvider(input: ProviderSetupInput) {
+    if (USE_MOCK_API) {
+      mockProvider = mockProviderFromInput(input, mockProvider ?? undefined);
       return Promise.resolve(mockProvider);
     }
-    return request<Provider>('/providers/onboard', { method: 'POST', body: input });
+    return request<ProviderProfile>('/providers', { method: 'POST', body: input });
   },
 
-  updateMyProvider(input: {
-    displayName?: string;
-    bio?: string | null;
-    pickupArea?: string;
-    pickupAddress?: string;
-    availability?: { isOpen?: boolean; maxQueueSize?: number };
-  }) {
+  updateMyProvider(input: Partial<ProviderSetupInput>) {
+    if (USE_MOCK_API) {
+      if (!mockProvider) throw new ApiError('PROVIDER_NOT_FOUND', 'No provider profile exists yet.', 404);
+      const merged = { ...mockProvider, ...input } as ProviderSetupInput & ProviderProfile;
+      mockProvider = mockProviderFromInput(merged, mockProvider);
+      return Promise.resolve(mockProvider);
+    }
+    return request<ProviderProfile>('/providers/me', { method: 'PATCH', body: input });
+  },
+
+  saveMyPrinter(input: ProviderPrinterInput) {
+    if (USE_MOCK_API) {
+      const now = new Date().toISOString();
+      const printer: ProviderPrinter = {
+        id: mockId(),
+        name: input.name || input.modelName || 'Printer',
+        modelName: input.modelName || input.name || 'Printer',
+        technology: 'FDM',
+        buildVolume: input.buildVolume,
+        materials: input.materials,
+        bestQuality: input.bestQuality ?? 'STANDARD',
+        isActive: input.isActive ?? true,
+        rates: [],
+        createdAt: now,
+      };
+      if (mockProvider) mockProvider = { ...mockProvider, printers: [...mockProvider.printers, printer] };
+      return Promise.resolve(printer);
+    }
+    return request<ProviderPrinter>('/providers/me/printers', { method: 'POST', body: input });
+  },
+
+  updateMyPrinter(id: string, input: Partial<ProviderPrinterInput>) {
+    if (USE_MOCK_API) {
+      if (!mockProvider) throw new ApiError('PROVIDER_NOT_FOUND', 'No provider profile exists yet.', 404);
+      const current = mockProvider.printers.find((printer) => printer.id === id);
+      if (!current) throw new ApiError('PRINTER_NOT_FOUND', 'Printer not found.', 404);
+      const { rates: _rates, ...printerChanges } = input;
+      const next: ProviderPrinter = {
+        ...current,
+        ...printerChanges,
+        id: current.id,
+        createdAt: current.createdAt,
+      };
+      mockProvider = {
+        ...mockProvider,
+        printers: mockProvider.printers.map((printer) => (printer.id === id ? next : printer)),
+      };
+      return Promise.resolve(next);
+    }
+    return request<ProviderPrinter>(`/providers/me/printers/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+
+  deleteMyPrinter(id: string) {
+    if (USE_MOCK_API) {
+      if (mockProvider) {
+        mockProvider = {
+          ...mockProvider,
+          printers: mockProvider.printers.filter((printer) => printer.id !== id),
+        };
+      }
+      return Promise.resolve({ success: true });
+    }
+    return request<{ success: true }>(`/providers/me/printers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  setMyPrinterMaterials(
+    id: string,
+    input: {
+      materials: Material[];
+      rates: Partial<Record<Material, { ratePerCm3: number; minimumOrder?: number; colors?: string[] }>>;
+    },
+  ) {
+    if (USE_MOCK_API) {
+      if (!mockProvider) throw new ApiError('PROVIDER_NOT_FOUND', 'No provider profile exists yet.', 404);
+      const current = mockProvider.printers.find((printer) => printer.id === id);
+      if (!current) throw new ApiError('PRINTER_NOT_FOUND', 'Printer not found.', 404);
+      const rates: MaterialRate[] = input.materials.flatMap((material) => {
+        const rate = input.rates[material];
+        return rate
+          ? [{
+              material,
+              ratePerCm3: rate.ratePerCm3,
+              minimumOrder: rate.minimumOrder ?? 0,
+              colors: rate.colors ?? [],
+            }]
+          : [];
+      });
+      const next: ProviderPrinter = {
+        ...current,
+        materials: input.materials,
+        rates,
+      };
+      mockProvider = {
+        ...mockProvider,
+        printers: mockProvider.printers.map((printer) => (printer.id === id ? next : printer)),
+      };
+      return Promise.resolve(next);
+    }
+    return request<ProviderPrinter>(`/providers/me/printers/${encodeURIComponent(id)}/materials`, {
+      method: 'PUT',
+      body: input,
+    });
+  },
+
+  setMyProviderHours(hours: ProviderProfile['hours']) {
     if (USE_MOCK_API) {
       if (!mockProvider) throw new ApiError('PROVIDER_NOT_FOUND', 'No provider profile exists yet.', 404);
       mockProvider = {
         ...mockProvider,
-        ...input,
-        availability: { ...mockProvider.availability, ...input.availability },
-        updatedAt: new Date().toISOString(),
+        hours,
+        availability: { ...mockProvider.availability, pickupHours: hours },
       };
       return Promise.resolve(mockProvider);
     }
-    return request<Provider>('/providers/me', { method: 'PATCH', body: input });
+    return request<ProviderProfile>('/providers/me/hours', { method: 'PUT', body: { hours } });
+  },
+
+  activateMyProvider() {
+    if (USE_MOCK_API) {
+      if (!mockProvider) throw new ApiError('PROVIDER_NOT_FOUND', 'No provider profile exists yet.', 404);
+      if (!mockProvider.setup.canAppearInSearch) {
+        throw new ApiError(
+          'PROVIDER_SETUP_INCOMPLETE',
+          `Complete your setup first: ${mockProvider.setup.missing.join(', ')}.`,
+          422,
+        );
+      }
+      mockProvider = { ...mockProvider, status: 'active' };
+      return Promise.resolve(mockProvider);
+    }
+    return request<ProviderProfile>('/providers/me/activate', { method: 'POST' });
   },
 
   /**

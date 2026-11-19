@@ -9,7 +9,8 @@ Expo (React Native + TypeScript + Expo Router) client for the `forge-backend` AP
 - Provider search: nearest / cheapest / fastest sorting, material filtering, fit status, and order placement.
 - **Orders** tab: active and past order lists; order tracking polls while focused and shows build progress. The 3D preview supports drag-to-orbit, two-finger pan/zoom, and reset view while the print builds.
 - **Profile** tab: name/phone, print preferences, stats, sign out.
-- **Provider** tab: become a provider (lab or individual), open/closed toggle, queue settings.
+- **Provider** tab: full provider setup wizard (type, public/private location, printers, per-material rates, pickup hours, agreements), activation gate, open/closed toggle, queue settings, and incoming orders.
+- Public provider cards: verified badge, description, photo URL, individual-maker privacy note, and “model doesn’t fit” state.
 
 ## 1. Configure
 
@@ -89,6 +90,22 @@ need to share a Wi-Fi network with the development computer.
 The app starts in mock mode (`EXPO_PUBLIC_API_MODE=mock`), which is the quickest way to see
 the full 3D progress demo on **one device or simulator**. Mock orders/models live in memory,
 so they are not shared between devices.
+
+### Provider onboarding demo
+
+Open **Profile → Become a provider** on any signed-in account. The wizard saves a draft after
+each step, so you can leave and come back:
+
+1. Choose **Lab** or **Individual maker**. Individual makers use a private exact address and a
+   fuzzed public map point.
+2. Add the display name, description, optional photo URL, pickup area, and private/public address.
+3. Add a printer (name/model are free text, FDM only), build volume, materials, and best quality.
+4. Set a rate per cm³, minimum order, and colours for each selected material.
+5. Set accepting-orders state, turnaround, queue limits, and weekly pickup hours.
+6. Review the checklist and accept the agreements, then tap **Activate provider profile**. The
+   dashboard opens and the provider appears in search only when the checklist is complete.
+
+In mock mode all of this is in memory; restart the app to reset it.
 
 ### One-device mock demo
 

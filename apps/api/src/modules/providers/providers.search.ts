@@ -1,14 +1,26 @@
 import { z } from 'zod';
+import type { Material } from '@forge/types';
 import { supabaseAdmin } from '../../config/supabase';
 import { AppError } from '../../middleware/error';
 import { estimatePrice, MATERIAL_RATES } from '../pricing/pricing.service';
+import { publicSearchPoint } from './providers.privacy';
+import {
+  isVerified,
+  MATERIALS,
+  type PrinterMaterialRow,
+  type PublicProviderRow,
+} from './providers.types';
 
 /** Demo reference point until the app sends the customer's location. */
 export const DEFAULT_SEARCH_CENTER = { lat: 13.8742, lng: 100.6075 };
 
 export interface ProviderResult {
   id: string;
+  type: 'LAB' | 'INDIVIDUAL';
   displayName: string;
+  description: string | null;
+  photoUrl: string | null;
+  isVerified: boolean;
   distanceKm: number | null;
   estimate: number;
   availability: string;
@@ -18,11 +30,10 @@ export interface ProviderResult {
 }
 
 type Sort = 'nearest' | 'cheapest' | 'fastest';
-type Material = keyof typeof MATERIAL_RATES;
 
 export const providerSearchSchema = z.object({
   modelId: z.string().uuid('modelId must be a UUID'),
-  material: z.enum(['PLA', 'ABS', 'PETG', 'TPU']).optional(),
+  material: z.enum(MATERIALS).optional(),
   sort: z.enum(['nearest', 'cheapest', 'fastest']).default('nearest'),
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional(),
@@ -32,20 +43,35 @@ interface PrinterRow {
   id: string;
   provider_id: string | null;
   build_volume: { x: number; y: number; z: number } | null;
-  materials: string[] | null;
+  materials: Material[] | string[] | null;
   price_per_cm3: number | string | null;
   est_completion_hours_per_unit: number | string | null;
   lat: number | string | null;
   lng: number | string | null;
+  is_active?: boolean | null;
+  printer_materials?: PrinterMaterialRow[] | null;
 }
 
 interface ProviderSearchRow {
   id: string;
+  user_id?: string | null;
+  type: 'LAB' | 'INDIVIDUAL';
   display_name: string;
+  bio?: string | null;
+  description?: string | null;
+  photo_url?: string | null;
   latitude: number | string | null;
   longitude: number | string | null;
+  status?: string | null;
   is_open: boolean;
   max_queue_size: number;
+  is_verified?: boolean;
+  email_verified_at?: string | null;
+  phone_verified_at?: string | null;
+  provider_private?: {
+    exact_latitude?: number | string | null;
+    exact_longitude?: number | string | null;
+  } | null;
   printers: PrinterRow[] | null;
 }
 
@@ -59,6 +85,7 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 }
 
 function asNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -71,10 +98,52 @@ function fitsBuildVolume(
 }
 
 function providerCoordinates(provider: ProviderSearchRow): { lat: number; lng: number } | null {
-  const lat = asNumber(provider.latitude);
-  const lng = asNumber(provider.longitude);
-  if (lat !== null && lng !== null) return { lat, lng };
-  return null;
+  return publicSearchPoint({
+    id: provider.id,
+    userId: provider.user_id,
+    type: provider.type,
+    latitude: provider.latitude,
+    longitude: provider.longitude,
+    exactLatitude: provider.provider_private?.exact_latitude,
+    exactLongitude: provider.provider_private?.exact_longitude,
+  });
+}
+
+function publicPrinterRates(printer: PrinterRow): PrinterMaterialRow[] {
+  return (printer.printer_materials ?? []).filter((rate) => (asNumber(rate.rate_per_cm3) ?? 0) > 0);
+}
+
+/** Legacy rows (from before onboarding v2) are kept working for older deployments. */
+function isPubliclyVisible(provider: ProviderSearchRow): boolean {
+  if (provider.status !== undefined && provider.status !== null) {
+    return provider.status === 'active' && provider.is_open;
+  }
+  return true;
+}
+
+function isPublicPrinter(printer: PrinterRow, material?: Material): boolean {
+  if (printer.is_active === false) return false;
+  const rates = printer.printer_materials === undefined ? [] : publicPrinterRates(printer);
+  if (printer.printer_materials !== undefined) {
+    if (rates.length === 0) return false;
+    if (material) return rates.some((rate) => rate.material === material);
+    return true;
+  }
+  if (material) return (printer.materials ?? []).includes(material);
+  return true;
+}
+
+function candidateMaterial(printer: PrinterRow, requested?: Material): Material {
+  if (requested) return requested;
+  const rates = publicPrinterRates(printer);
+  const first = rates[0]?.material;
+  return MATERIALS.includes(first as Material) ? (first as Material) : 'PLA';
+}
+
+function candidateRate(printer: PrinterRow, material: Material): number {
+  const configured = publicPrinterRates(printer).find((rate) => rate.material === material);
+  if (configured) return asNumber(configured.rate_per_cm3) ?? MATERIAL_RATES[material];
+  return asNumber(printer.price_per_cm3) ?? MATERIAL_RATES[material];
 }
 
 function compareNullable(a: number | null, b: number | null): number {
@@ -85,7 +154,7 @@ function compareNullable(a: number | null, b: number | null): number {
 
 /**
  * Public provider search. Returns one result per provider (its best printer for
- * this model) and never exposes the provider's exact pickup address.
+ * this model) and never exposes exact addresses or exact coordinates.
  */
 export async function searchProviders(query: unknown): Promise<ProviderResult[]> {
   const input = providerSearchSchema.parse(query);
@@ -111,7 +180,9 @@ export async function searchProviders(query: unknown): Promise<ProviderResult[]>
 
   const { data: providers, error: providersError } = await supabaseAdmin
     .from('providers')
-    .select('*, printers(*)');
+    .select(
+      '*, printers(*, printer_materials(*)), provider_private(exact_latitude, exact_longitude)',
+    );
 
   if (providersError) {
     throw new AppError(500, 'PROVIDER_FETCH_FAILED', 'Could not load providers');
@@ -124,10 +195,11 @@ export async function searchProviders(query: unknown): Promise<ProviderResult[]>
   const results: ProviderResult[] = [];
 
   for (const provider of (providers ?? []) as unknown as ProviderSearchRow[]) {
-    const eligiblePrinters = (provider.printers ?? []).filter((printer) => {
-      if (!input.material) return true;
-      return (printer.materials ?? []).includes(input.material);
-    });
+    if (!isPubliclyVisible(provider)) continue;
+
+    const eligiblePrinters = (provider.printers ?? []).filter((printer) =>
+      isPublicPrinter(printer, input.material),
+    );
     if (eligiblePrinters.length === 0) continue;
 
     const coordinates = providerCoordinates(provider);
@@ -138,17 +210,18 @@ export async function searchProviders(query: unknown): Promise<ProviderResult[]>
     const candidates = eligiblePrinters.map((printer) => {
       const buildVolume = printer.build_volume ?? { x: 220, y: 220, z: 250 };
       const fits = fitsBuildVolume(boundingBox, buildVolume);
-      const rate = asNumber(printer.price_per_cm3) ?? MATERIAL_RATES[input.material ?? 'PLA'];
+      const material = candidateMaterial(printer, input.material);
+      const rate = candidateRate(printer, material);
       const estimate =
-        estimatePrice({
-          material: (input.material ?? 'PLA') as Material,
-          volumeCm3,
-          quantity: 1,
-          quality: 'STANDARD',
-        }) *
-        (rate / MATERIAL_RATES[(input.material ?? 'PLA') as Material]);
-      const etaHours = asNumber(printer.est_completion_hours_per_unit);
-      return { printer, buildVolume, fits, estimate, etaHours };
+        estimatePrice({ material, volumeCm3, quantity: 1, quality: 'STANDARD' }) *
+        (rate / MATERIAL_RATES[material]);
+      return {
+        printer,
+        buildVolume,
+        fits,
+        estimate,
+        etaHours: asNumber(printer.est_completion_hours_per_unit),
+      };
     });
 
     candidates.sort((a, b) => {
@@ -158,19 +231,24 @@ export async function searchProviders(query: unknown): Promise<ProviderResult[]>
     const best = candidates[0];
     if (!best) continue;
 
-    const printerCoordinates = {
-      lat: asNumber(best.printer.lat),
-      lng: asNumber(best.printer.lng),
-    };
     const resultDistance =
       distanceKm ??
-      (printerCoordinates.lat !== null && printerCoordinates.lng !== null
-        ? haversineKm(origin.lat, origin.lng, printerCoordinates.lat, printerCoordinates.lng)
+      (asNumber(best.printer.lat) !== null && asNumber(best.printer.lng) !== null
+        ? haversineKm(
+            origin.lat,
+            origin.lng,
+            asNumber(best.printer.lat) as number,
+            asNumber(best.printer.lng) as number,
+          )
         : null);
 
     results.push({
       id: provider.id,
+      type: provider.type,
       displayName: provider.display_name,
+      description: provider.description ?? provider.bio ?? null,
+      photoUrl: provider.photo_url ?? null,
+      isVerified: isVerified(provider as unknown as PublicProviderRow),
       distanceKm: resultDistance,
       estimate: Number(best.estimate.toFixed(2)),
       availability: provider.is_open
