@@ -49,6 +49,7 @@ function RootNavigator() {
       <Stack.Screen name="auth/success" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="printer/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="provider-onboarding" options={{ headerShown: false }} />
       {/* The 3D viewer uses horizontal drags to orbit the model. The native
           swipe-back gesture competes with that drag and pops the screen, so
           disable it here. Each of these screens has its own in-app back button. */}

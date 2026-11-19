@@ -4,7 +4,6 @@ import { estimatePrice, MATERIAL_RATES } from '../pricing/pricing.service';
 import { projectDemoOrder } from './orders.demo';
 import type { CreateOrderInput, ProgressInput, StatusInput } from './orders.schemas';
 import {
-  ACCEPTANCE_PENDING,
   STATUS_TRANSITIONS,
   type Material,
   type OrderRow,
@@ -15,6 +14,17 @@ import {
 } from './orders.types';
 
 const DEFAULT_BUILD_VOLUME = { x: 220, y: 220, z: 250 };
+const CONFIRMED_OR_LATER: readonly OrderStatus[] = [
+  'CONFIRMED',
+  'IN_QUEUE',
+  'PRINTING',
+  'READY_FOR_PICKUP',
+];
+
+interface PrinterMaterialRate {
+  material: Material;
+  rate_per_cm3: number | string | null;
+}
 
 function generateOrderNumber(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -29,6 +39,37 @@ function numberOrNull(value: unknown): number | null {
 function fitsPrinter(printer: PrinterForOrder, box: { x: number; y: number; z: number }): boolean {
   const bed = printer.build_volume ?? DEFAULT_BUILD_VOLUME;
   return box.x <= bed.x && box.y <= bed.y && box.z <= bed.z;
+}
+
+/** A provider cannot place an order for a model printed on their own printer. */
+export function assertNotSelfOrder(userId: string, provider: ProviderForOrder): void {
+  if (provider.user_id && provider.user_id === userId) {
+    throw new AppError(403, 'CANNOT_ORDER_OWN_MODEL', 'You cannot order from yourself');
+  }
+}
+
+/** Provider-specific rates win over the legacy printer column and global rates. */
+export function configuredPrinterRate(printer: PrinterForOrder, material: Material): number | null {
+  const rates = (printer.printer_materials as PrinterMaterialRate[] | undefined) ?? [];
+  const configured = rates.find((rate) => rate.material === material);
+  if (!configured) return null;
+  const parsed = Number(configured.rate_per_cm3);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Exact addresses belong to provider_private. They are only revealed to the
+ * customer once an individual provider has accepted the order.
+ */
+export function addressForOrder(
+  status: OrderStatus,
+  providerType: ProviderForOrder['type'],
+  exactAddress: string | null | undefined,
+  pickupAddress: string | null | undefined,
+): string | null {
+  if (providerType === 'LAB') return pickupAddress ?? null;
+  if (!CONFIRMED_OR_LATER.includes(status)) return null;
+  return exactAddress ?? pickupAddress ?? null;
 }
 
 export function assertTransition(from: OrderStatus, to: OrderStatus): void {
@@ -68,12 +109,20 @@ async function getModelForCustomer(modelId: string, userId: string) {
 async function getProviderById(providerId: string): Promise<ProviderForOrder | null> {
   const { data, error } = await supabaseAdmin
     .from('providers')
-    .select('id, type, display_name, pickup_area, pickup_address')
+    .select('id, user_id, type, display_name, pickup_area, pickup_address')
     .eq('id', providerId)
     .maybeSingle();
 
   if (error) throw new AppError(500, 'PROVIDER_FETCH_FAILED', 'Could not load the provider');
-  return (data as ProviderForOrder | null) ?? null;
+  const provider = (data as ProviderForOrder | null) ?? null;
+  if (!provider) return null;
+
+  const { data: privateRow } = await supabaseAdmin
+    .from('provider_private')
+    .select('exact_address')
+    .eq('provider_id', providerId)
+    .maybeSingle();
+  return { ...provider, exact_address: (privateRow?.exact_address as string | null) ?? null };
 }
 
 async function getProviderForPrinter(printerId: string): Promise<ProviderForOrder | null> {
@@ -95,7 +144,7 @@ async function selectPrinter(
   if (!input.usedProviderId) {
     const { data: printer, error } = await supabaseAdmin
       .from('printers')
-      .select('*')
+      .select('*, printer_materials(*)')
       .eq('id', input.providerOrPrinterId)
       .maybeSingle();
 
@@ -109,7 +158,9 @@ async function selectPrinter(
 
   const { data: provider, error } = await supabaseAdmin
     .from('providers')
-    .select('id, type, display_name, pickup_area, pickup_address, printers(*)')
+    .select(
+      'id, user_id, type, display_name, pickup_area, pickup_address, printers(*, printer_materials(*))',
+    )
     .eq('id', input.providerOrPrinterId)
     .maybeSingle();
 
@@ -151,13 +202,17 @@ function formatOrder(
   };
 
   if (provider) {
-    const canSeeAddress = provider.type === 'LAB' || !ACCEPTANCE_PENDING.includes(order.status);
     result.provider = {
       id: provider.id,
       type: provider.type,
       displayName: provider.display_name,
       pickupArea: provider.pickup_area,
-      pickupAddress: canSeeAddress ? provider.pickup_address : null,
+      pickupAddress: addressForOrder(
+        order.status,
+        provider.type,
+        provider.exact_address,
+        provider.pickup_address,
+      ),
     };
   }
 
@@ -224,8 +279,12 @@ export async function createOrder(
 ): Promise<OrderWithRelations> {
   const { volumeCm3, boundingBox } = await getModelForCustomer(input.modelId, userId);
   const { provider, printer } = await selectPrinter(input, boundingBox);
+  assertNotSelfOrder(userId, provider);
 
-  const rate = numberOrNull(printer.price_per_cm3) ?? MATERIAL_RATES[input.material];
+  const rate =
+    configuredPrinterRate(printer, input.material) ??
+    numberOrNull(printer.price_per_cm3) ??
+    MATERIAL_RATES[input.material];
   const baseEstimate = estimatePrice({
     material: input.material as Material,
     volumeCm3,

@@ -98,7 +98,7 @@ export default function ProfileScreen() {
             title="Become a provider"
             size="sm"
             labelSize="md"
-            onPress={() => router.push('/provider')}
+            onPress={() => router.push('/provider-onboarding' as never)}
             style={styles.makerButton}
           />
         </View>

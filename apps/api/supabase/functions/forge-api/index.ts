@@ -163,6 +163,327 @@ function toProvider(row: JsonObject) {
   };
 }
 
+const EDGE_MATERIAL_RATES: Record<string, number> = {
+  PLA: 0.05,
+  ABS: 0.07,
+  PETG: 0.08,
+  TPU: 0.12,
+};
+const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const MATERIALS = ['PLA', 'ABS', 'PETG', 'TPU'];
+const QUALITIES = ['DRAFT', 'STANDARD', 'HIGH'];
+const CONFIRMED_OR_LATER = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
+
+function isObject(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown, name: string, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    fail(400, 'VALIDATION_ERROR', `${name} must be between ${min} and ${max}`);
+  }
+  return parsed;
+}
+
+function validateBuildVolume(value: unknown): { x: number; y: number; z: number } {
+  if (!isObject(value)) fail(400, 'VALIDATION_ERROR', 'buildVolume is required');
+  return {
+    x: finiteNumber(value.x, 'buildVolume.x', 20, 1000),
+    y: finiteNumber(value.y, 'buildVolume.y', 20, 1000),
+    z: finiteNumber(value.z, 'buildVolume.z', 20, 1000),
+  };
+}
+
+interface EdgeRate {
+  ratePerCm3: number;
+  minimumOrder: number;
+  colors: string[];
+}
+
+function validateRateMap(value: unknown): Record<string, EdgeRate> {
+  if (!isObject(value)) fail(400, 'VALIDATION_ERROR', 'rates must be an object');
+  const result: Record<string, EdgeRate> = {};
+  for (const [material, raw] of Object.entries(value)) {
+    if (!MATERIALS.includes(material))
+      fail(400, 'VALIDATION_ERROR', `Invalid material: ${material}`);
+    if (!isObject(raw)) fail(400, 'VALIDATION_ERROR', `Invalid rate for ${material}`);
+    result[material] = {
+      ratePerCm3: finiteNumber(raw.ratePerCm3, `${material}.ratePerCm3`, 0.000001, 1000),
+      minimumOrder:
+        raw.minimumOrder === undefined
+          ? 0
+          : finiteNumber(raw.minimumOrder, `${material}.minimumOrder`, 0, 1000000),
+      colors: Array.isArray(raw.colors)
+        ? raw.colors.map((color) => String(color)).filter(Boolean)
+        : [],
+    };
+  }
+  return result;
+}
+
+function validateMaterials(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(400, 'VALIDATION_ERROR', 'At least one material is required');
+  }
+  const materials = value.map(String);
+  if (materials.some((material) => !MATERIALS.includes(material))) {
+    fail(400, 'VALIDATION_ERROR', 'Invalid material list');
+  }
+  return materials;
+}
+
+function validateHours(value: unknown): JsonObject {
+  if (!isObject(value)) fail(400, 'VALIDATION_ERROR', 'hours must be an object');
+  const result: JsonObject = {};
+  for (const [day, range] of Object.entries(value)) {
+    if (!DAYS_OF_WEEK.includes(day)) fail(400, 'VALIDATION_ERROR', `Invalid day: ${day}`);
+    if (range === null) {
+      result[day] = null;
+      continue;
+    }
+    if (
+      !isObject(range) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(range.open)) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(range.close)) ||
+      String(range.open) >= String(range.close)
+    ) {
+      fail(400, 'VALIDATION_ERROR', `${day} must be a valid HH:mm range with open before close`);
+    }
+    result[day] = { open: range.open, close: range.close };
+  }
+  return result;
+}
+
+function validateAgreements(value: unknown): JsonObject {
+  if (!isObject(value)) fail(400, 'VALIDATION_ERROR', 'agreements must be an object');
+  const keys = ['liability', 'paymentTerms', 'prohibitedItems', 'safePickup'];
+  const result: JsonObject = {};
+  for (const key of keys) {
+    if (value[key] !== undefined && typeof value[key] !== 'boolean') {
+      fail(400, 'VALIDATION_ERROR', `${key} must be a boolean`);
+    }
+    result[key] = Boolean(value[key]);
+  }
+  return result;
+}
+
+interface EdgePrinterInput {
+  name: string;
+  modelName: string;
+  buildVolume: { x: number; y: number; z: number };
+  materials: string[];
+  bestQuality: string;
+  isActive: boolean;
+  rates: Record<string, EdgeRate>;
+}
+
+function validatePrinter(value: unknown): EdgePrinterInput {
+  if (!isObject(value)) fail(400, 'VALIDATION_ERROR', 'printer must be an object');
+  const modelName =
+    typeof value.modelName === 'string' && value.modelName.trim()
+      ? value.modelName.trim()
+      : typeof value.name === 'string' && value.name.trim()
+        ? value.name.trim()
+        : fail(400, 'VALIDATION_ERROR', 'printer.modelName is required');
+  const bestQuality = value.bestQuality ?? 'STANDARD';
+  if (typeof bestQuality !== 'string' || !QUALITIES.includes(bestQuality)) {
+    fail(400, 'VALIDATION_ERROR', 'Invalid printer quality');
+  }
+  const rates = value.rates === undefined ? {} : validateRateMap(value.rates);
+  return {
+    name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : modelName,
+    modelName,
+    buildVolume: validateBuildVolume(value.buildVolume),
+    materials: validateMaterials(value.materials),
+    bestQuality,
+    isActive: value.isActive === undefined ? true : Boolean(value.isActive),
+    rates,
+  };
+}
+
+function validateCoordinatePair(first: unknown, second: unknown, names: [string, string]): void {
+  const hasFirst = first !== undefined && first !== null;
+  const hasSecond = second !== undefined && second !== null;
+  if (hasFirst !== hasSecond) {
+    fail(400, 'VALIDATION_ERROR', `${names[0]} and ${names[1]} must be provided together`);
+  }
+}
+
+function fuzzPublicPoint(seed: string, latitude: number, longitude: number) {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  const angle = ((hash >>> 0) / 0xffffffff) * 2 * Math.PI;
+  const kmPerDegreeLng = 111.32 * Math.max(0.2, Math.cos((latitude * Math.PI) / 180));
+  return {
+    lat: latitude + (0.5 * Math.sin(angle)) / 111.32,
+    lng: longitude + (0.5 * Math.cos(angle)) / kmPerDegreeLng,
+  };
+}
+
+function toEdgePrinter(row: JsonObject) {
+  const materials = Array.isArray(row.materials) ? (row.materials as string[]) : [];
+  const nested = Array.isArray(row.printer_materials)
+    ? (row.printer_materials as JsonObject[])
+    : [];
+  const rates = nested
+    .map((rate) => ({
+      material: String(rate.material),
+      ratePerCm3: Number(rate.rate_per_cm3),
+      minimumOrder: Number(rate.minimum_order ?? 0),
+      colors: Array.isArray(rate.colors) ? (rate.colors as string[]) : [],
+    }))
+    .filter((rate) => rate.ratePerCm3 > 0);
+  const legacyRate = Number(row.price_per_cm3 ?? 0);
+  const effectiveRates =
+    rates.length > 0
+      ? rates
+      : materials.map((material) => ({
+          material,
+          ratePerCm3: legacyRate,
+          minimumOrder: Number(row.minimum_order ?? 0),
+          colors: [] as string[],
+        }));
+  return {
+    id: row.id,
+    name: row.name,
+    modelName: row.model_name ?? row.name,
+    technology: 'FDM',
+    buildVolume: isObject(row.build_volume) ? row.build_volume : { x: 220, y: 220, z: 250 },
+    materials,
+    bestQuality: row.best_quality ?? 'STANDARD',
+    isActive: row.is_active ?? true,
+    rates: effectiveRates,
+    createdAt: row.created_at,
+  };
+}
+
+function aggregateEdgeRates(printers: ReturnType<typeof toEdgePrinter>[]) {
+  const rates: Record<string, { ratePerCm3: number; minimumOrder: number; colors: string[] }> = {};
+  for (const printer of printers) {
+    for (const rate of printer.rates) {
+      const current = rates[rate.material];
+      if (!current || rate.ratePerCm3 < current.ratePerCm3) rates[rate.material] = rate;
+    }
+  }
+  return rates;
+}
+
+async function extendedProvider(row: JsonObject) {
+  const providerId = String(row.id);
+  const [privateResult, printerResult, agreementResult] = await Promise.all([
+    db.from('provider_private').select('*').eq('provider_id', providerId).maybeSingle(),
+    db
+      .from('printers')
+      .select('*, printer_materials(*)')
+      .eq('provider_id', providerId)
+      .order('created_at'),
+    db.from('provider_agreements').select('*').eq('provider_id', providerId).maybeSingle(),
+  ]);
+  const privateRow = privateResult.error ? {} : ((privateResult.data as JsonObject | null) ?? {});
+  const printerRows = printerResult.error
+    ? []
+    : ((printerResult.data as JsonObject[] | null) ?? []);
+  const agreementRow = agreementResult.error
+    ? {}
+    : ((agreementResult.data as JsonObject | null) ?? {});
+  const printers = printerRows.map(toEdgePrinter);
+  const agreements = {
+    liability: Boolean(agreementRow.liability),
+    paymentTerms: Boolean(agreementRow.payment_terms),
+    prohibitedItems: Boolean(agreementRow.prohibited_items),
+    safePickup: Boolean(agreementRow.safe_pickup),
+  };
+  const hasPickupArea = Boolean(String(row.pickup_area ?? '').trim());
+  const hasActivePrinter = printers.some((printer) => printer.isActive);
+  const hasMaterialRate = printers.some((printer) => printer.rates.length > 0);
+  const hasAgreements = Object.values(agreements).every(Boolean);
+  const missing: string[] = [];
+  if (!hasPickupArea) missing.push('pickup area');
+  if (!hasActivePrinter) missing.push('active printer');
+  if (!hasMaterialRate) missing.push('material rate');
+  if (!hasAgreements) missing.push('agreements');
+  const hours: JsonObject = {};
+  for (const day of DAYS_OF_WEEK)
+    hours[day] = (row.pickup_hours as JsonObject | null)?.[day] ?? null;
+  const status = typeof row.status === 'string' ? row.status : 'draft';
+
+  return {
+    ...toProvider(row),
+    description: row.description ?? row.bio ?? null,
+    photoUrl: row.photo_url ?? null,
+    exactAddress: privateRow.exact_address ?? null,
+    pickupInstructions: privateRow.pickup_instructions ?? null,
+    contactPhone: privateRow.contact_phone ?? null,
+    exactLatitude: privateRow.exact_latitude ?? null,
+    exactLongitude: privateRow.exact_longitude ?? null,
+    status,
+    turnaroundDays: Number(row.turnaround_days ?? 3),
+    maxActiveOrders: Number(row.max_active_orders ?? 10),
+    agreements,
+    setup: {
+      canAppearInSearch: status === 'active' && Boolean(row.is_open) && missing.length === 0,
+      missing,
+      hasPickupArea,
+      hasActivePrinter,
+      hasMaterialRate,
+      hasAgreements,
+    },
+    printers,
+    hours,
+    rates: aggregateEdgeRates(printers),
+  };
+}
+
+async function saveEdgeRates(printerId: string, rates: Record<string, EdgeRate>) {
+  for (const [material, rate] of Object.entries(rates)) {
+    const { error } = await db.from('printer_materials').upsert(
+      {
+        printer_id: printerId,
+        material,
+        rate_per_cm3: rate.ratePerCm3,
+        minimum_order: rate.minimumOrder,
+        colors: rate.colors,
+      },
+      { onConflict: 'printer_id,material' },
+    );
+    if (error) fail(500, 'PRINTER_RATE_SAVE_FAILED', 'Could not save printer rates');
+  }
+}
+
+async function saveEdgePrinters(
+  providerId: string,
+  printers: EdgePrinterInput[],
+  point: { lat: number | null; lng: number | null },
+) {
+  for (const printer of printers) {
+    const { data, error } = await db
+      .from('printers')
+      .insert({
+        provider_id: providerId,
+        name: printer.name,
+        model_name: printer.modelName,
+        technology: 'FDM',
+        build_volume: printer.buildVolume,
+        materials: printer.materials,
+        best_quality: printer.bestQuality,
+        is_active: printer.isActive,
+        price_per_cm3: Object.values(printer.rates)[0]?.ratePerCm3 ?? 0.05,
+        minimum_order: Object.values(printer.rates)[0]?.minimumOrder ?? 0,
+        lat: point.lat ?? 13.8708,
+        lng: point.lng ?? 100.6053,
+        est_completion_hours_per_unit: 24,
+      })
+      .select('id')
+      .single();
+    if (error || !data) fail(500, 'PRINTER_CREATE_FAILED', 'Could not save printer');
+    await saveEdgeRates(String(data.id), printer.rates);
+  }
+}
+
 async function getOrCreateProfile(user: AuthUser) {
   let { data: row, error } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error) fail(500, 'PROFILE_FETCH_FAILED', 'Could not load profile');
@@ -194,6 +515,188 @@ async function getOrCreateProfile(user: AuthUser) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function orderWithAddressPrivacy(row: JsonObject): Promise<JsonObject> {
+  const printers = row.printers;
+  const printer = isObject(printers)
+    ? printers
+    : Array.isArray(printers)
+      ? ((printers as JsonObject[])[0] ?? null)
+      : null;
+  if (!printer || !printer.provider_id) return row;
+  const [providerResult, privateResult] = await Promise.all([
+    db
+      .from('providers')
+      .select('id, type, display_name, pickup_area, pickup_address')
+      .eq('id', printer.provider_id)
+      .maybeSingle(),
+    db
+      .from('provider_private')
+      .select('exact_address')
+      .eq('provider_id', printer.provider_id)
+      .maybeSingle(),
+  ]);
+  const provider = providerResult.data as JsonObject | null;
+  if (!provider) return row;
+  const status = String(row.status ?? '');
+  const pickupAddress =
+    provider.type === 'LAB'
+      ? (provider.pickup_address ?? null)
+      : CONFIRMED_OR_LATER.includes(status)
+        ? ((privateResult.data as JsonObject | null)?.exact_address ??
+          provider.pickup_address ??
+          null)
+        : null;
+  return {
+    ...row,
+    provider: {
+      id: provider.id,
+      type: provider.type,
+      displayName: provider.display_name,
+      pickupArea: provider.pickup_area,
+      pickupAddress,
+    },
+  };
+}
+
+async function publicProviderSearch(url: URL): Promise<JsonObject> {
+  const modelId = url.searchParams.get('modelId');
+  if (!modelId) fail(400, 'VALIDATION_ERROR', 'modelId is required');
+  const materialParam = url.searchParams.get('material');
+  if (materialParam && !MATERIALS.includes(materialParam)) {
+    fail(400, 'VALIDATION_ERROR', 'Invalid material');
+  }
+  const sort = url.searchParams.get('sort') ?? 'nearest';
+  if (!['nearest', 'cheapest', 'fastest'].includes(sort)) {
+    fail(400, 'VALIDATION_ERROR', 'Invalid sort');
+  }
+  const latParam = url.searchParams.get('lat');
+  const lngParam = url.searchParams.get('lng');
+  const originLat = latParam === null ? 13.8742 : Number(latParam);
+  const originLng = lngParam === null ? 100.6075 : Number(lngParam);
+
+  const modelResult = await db
+    .from('models')
+    .select('bounding_box, volume_cm3')
+    .eq('id', modelId)
+    .maybeSingle();
+  if (modelResult.error) fail(500, 'MODEL_FETCH_FAILED', 'Could not load the model');
+  if (!modelResult.data) fail(404, 'MODEL_NOT_FOUND', 'Model not found');
+  const box = (modelResult.data as JsonObject).bounding_box as JsonObject | null;
+  if (!box) fail(422, 'INVALID_MODEL_BOUNDING_BOX', 'The model has no bounding box');
+  const volumeCm3 = Number((modelResult.data as JsonObject).volume_cm3 ?? 0);
+  const { data, error } = await db
+    .from('providers')
+    .select(
+      '*, printers(*, printer_materials(*)), provider_private(exact_latitude, exact_longitude)',
+    );
+  if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load providers');
+
+  const results: JsonObject[] = [];
+  for (const raw of (data as JsonObject[] | null) ?? []) {
+    if (raw.status !== undefined && raw.status !== null) {
+      if (raw.status !== 'active' || !raw.is_open) continue;
+    }
+    const printers = ((raw.printers as JsonObject[] | null) ?? []).filter((printer) => {
+      if (printer.is_active === false) return false;
+      const nested = Array.isArray(printer.printer_materials)
+        ? (printer.printer_materials as JsonObject[])
+        : [];
+      if (printer.printer_materials !== undefined) {
+        if (nested.length === 0) return false;
+        if (materialParam) return nested.some((rate) => rate.material === materialParam);
+        return true;
+      }
+      if (materialParam)
+        return ((printer.materials as string[] | null) ?? []).includes(materialParam);
+      return true;
+    });
+    if (printers.length === 0) continue;
+
+    const privateRow = isObject(raw.provider_private)
+      ? (raw.provider_private as JsonObject)
+      : Array.isArray(raw.provider_private)
+        ? ((raw.provider_private as JsonObject[])[0] ?? {})
+        : {};
+    let point: { lat: number; lng: number } | null = null;
+    const publicLat = Number(raw.latitude);
+    const publicLng = Number(raw.longitude);
+    if (
+      raw.type === 'INDIVIDUAL' &&
+      privateRow.exact_latitude != null &&
+      privateRow.exact_longitude != null
+    ) {
+      point = fuzzPublicPoint(
+        String(raw.user_id ?? raw.id),
+        Number(privateRow.exact_latitude),
+        Number(privateRow.exact_longitude),
+      );
+    } else if (Number.isFinite(publicLat) && Number.isFinite(publicLng)) {
+      point = { lat: publicLat, lng: publicLng };
+    }
+    const distanceKm = point ? distanceKmFrom(originLat, originLng, point.lat, point.lng) : null;
+
+    const candidates = printers.map((printer) => {
+      const buildVolume = isObject(printer.build_volume)
+        ? (printer.build_volume as { x: number; y: number; z: number })
+        : { x: 220, y: 220, z: 250 };
+      const fits =
+        Number(box.x) <= Number(buildVolume.x) &&
+        Number(box.y) <= Number(buildVolume.y) &&
+        Number(box.z) <= Number(buildVolume.z);
+      const nested = Array.isArray(printer.printer_materials)
+        ? (printer.printer_materials as JsonObject[])
+        : [];
+      const material = materialParam ?? String(nested[0]?.material ?? 'PLA');
+      const configured = nested.find((rate) => rate.material === material);
+      const rate = configured
+        ? Number(configured.rate_per_cm3)
+        : Number(printer.price_per_cm3 ?? EDGE_MATERIAL_RATES[material] ?? 0.05);
+      // Keep search estimates aligned with the documented formula:
+      // ratePerCm3 × volumeCm3 × quantity × qualityFactor (STANDARD = 1 here).
+      return {
+        estimate: Number((rate * volumeCm3).toFixed(2)),
+        fits,
+        etaHours: Number(printer.est_completion_hours_per_unit ?? 0) || null,
+        buildVolume,
+      };
+    });
+    candidates.sort((a, b) => (a.fits === b.fits ? a.estimate - b.estimate : a.fits ? -1 : 1));
+    const best = candidates[0];
+    if (!best) continue;
+
+    results.push({
+      id: raw.id,
+      type: raw.type,
+      displayName: raw.display_name,
+      description: raw.description ?? raw.bio ?? null,
+      photoUrl: raw.photo_url ?? null,
+      isVerified:
+        raw.type === 'LAB'
+          ? Boolean(raw.is_verified)
+          : Boolean(raw.email_verified_at && raw.phone_verified_at),
+      distanceKm,
+      estimate: best.estimate,
+      availability: raw.is_open
+        ? `Accepting orders · ${raw.max_queue_size} slots`
+        : 'Currently closed',
+      fits: best.fits,
+      etaHours: best.etaHours,
+      buildVolume: best.buildVolume,
+    });
+  }
+
+  results.sort((a, b) => {
+    if (sort === 'cheapest') return Number(a.estimate) - Number(b.estimate);
+    if (sort === 'fastest') return Number(a.etaHours ?? Infinity) - Number(b.etaHours ?? Infinity);
+    return Number(a.distanceKm ?? Infinity) - Number(b.distanceKm ?? Infinity);
+  });
+  return { providers: results };
+}
+
+function distanceKmFrom(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  return distanceKm(lat1, lng1, lat2, lng2);
 }
 
 function normalizeRoute(pathname: string): string {
@@ -307,7 +810,10 @@ async function route(request: Request): Promise<Response> {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       if (error) fail(500, 'DATABASE_ERROR', 'Could not load orders');
-      return json({ orders: data ?? [] });
+      const orders = await Promise.all(
+        ((data as JsonObject[] | null) ?? []).map((row) => orderWithAddressPrivacy(row)),
+      );
+      return json({ orders });
     }
 
     if (method === 'POST' && path === '/orders') {
@@ -338,6 +844,29 @@ async function route(request: Request): Promise<Response> {
       if (printerError) fail(500, 'DATABASE_ERROR', 'Could not load printer');
       if (!printer) fail(404, 'NOT_FOUND', 'Printer not found');
 
+      let orderStatus = 'CONFIRMED';
+      if (printer.provider_id) {
+        const { data: provider } = await db
+          .from('providers')
+          .select('user_id, type')
+          .eq('id', printer.provider_id)
+          .maybeSingle();
+        if (provider?.user_id === user.id) {
+          fail(403, 'CANNOT_ORDER_OWN_MODEL', 'You cannot order from yourself');
+        }
+        if (provider?.type === 'INDIVIDUAL') orderStatus = 'PENDING_ACCEPTANCE';
+      }
+      const { data: configuredRateRow } = await db
+        .from('printer_materials')
+        .select('rate_per_cm3')
+        .eq('printer_id', printerId)
+        .eq('material', material)
+        .maybeSingle();
+      const configuredRate = Number(configuredRateRow?.rate_per_cm3 ?? 0);
+      const globalRate = EDGE_MATERIAL_RATES[material] ?? 0.05;
+      const rateFactor =
+        configuredRate > 0 ? configuredRate / globalRate : Number(printer.price_factor ?? 1);
+
       const number = crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase();
       const eta = new Date(
         Date.now() + Number(printer.est_completion_hours_per_unit || 2) * quantity * 3600000,
@@ -355,8 +884,8 @@ async function route(request: Request): Promise<Response> {
           payment_method: body.payment_method === 'PROMPTPAY' ? 'PROMPTPAY' : 'CASH_ON_PICKUP',
           infill,
           quantity,
-          price_snapshot: estimatePrice(material, quality, quantity, Number(printer.price_factor)),
-          status: 'CONFIRMED',
+          price_snapshot: estimatePrice(material, quality, quantity, rateFactor),
+          status: orderStatus,
           progress: 0,
           eta: eta.toISOString(),
         })
@@ -365,8 +894,11 @@ async function route(request: Request): Promise<Response> {
       if (error || !order) fail(500, 'DATABASE_ERROR', 'Could not create order');
       const event = await db.from('order_status_events').insert({
         order_id: order.id,
-        status: 'CONFIRMED',
-        notes: 'Order created and confirmed.',
+        status: orderStatus,
+        notes:
+          orderStatus === 'PENDING_ACCEPTANCE'
+            ? 'Order placed. Waiting for the provider to accept.'
+            : 'Order created and confirmed.',
       });
       if (event.error)
         fail(500, 'DATABASE_ERROR', 'Order created, but its status event could not be saved');
@@ -385,7 +917,7 @@ async function route(request: Request): Promise<Response> {
           .maybeSingle();
         if (error) fail(500, 'DATABASE_ERROR', 'Could not load order');
         if (!data) fail(404, 'NOT_FOUND', 'Order not found');
-        return json({ order: data });
+        return json({ order: await orderWithAddressPrivacy(data as unknown as JsonObject) });
       }
 
       if (method === 'PATCH' && path.endsWith('/status')) {
@@ -447,7 +979,7 @@ async function route(request: Request): Promise<Response> {
         });
         if (event.error)
           fail(500, 'DATABASE_ERROR', 'Order updated, but its status event could not be saved');
-        return json({ order });
+        return json({ order: await orderWithAddressPrivacy(order as unknown as JsonObject) });
       }
     }
   }
@@ -586,30 +1118,87 @@ async function route(request: Request): Promise<Response> {
     }
   }
 
+  if (method === 'GET' && path === '/providers') {
+    return json(await publicProviderSearch(url));
+  }
+
   if (path.startsWith('/providers')) {
     const user = await requireUser(request);
-    if (method === 'POST' && path === '/providers/onboard') {
-      const body = await bodyOf(request);
+
+    const ownedProvider = async (): Promise<JsonObject> => {
+      const { data, error } = await db
+        .from('providers')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
+      if (!data) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
+      return data as unknown as JsonObject;
+    };
+
+    const ownedPrinter = async (printerId: string): Promise<JsonObject> => {
+      const provider = await ownedProvider();
+      const { data, error } = await db
+        .from('printers')
+        .select('*, printer_materials(*)')
+        .eq('id', printerId)
+        .maybeSingle();
+      if (error) fail(500, 'PRINTER_FETCH_FAILED', 'Could not load printer');
+      if (!data) fail(404, 'PRINTER_NOT_FOUND', 'Printer not found');
+      if (data.provider_id !== provider.id)
+        fail(403, 'FORBIDDEN', 'This printer belongs to another provider');
+      return data as unknown as JsonObject;
+    };
+
+    const createProviderFromBody = async (body: JsonObject) => {
       const type = body.type;
       if (type !== 'LAB' && type !== 'INDIVIDUAL')
         fail(400, 'VALIDATION_ERROR', 'Invalid provider type');
+      validateCoordinatePair(body.latitude, body.longitude, ['latitude', 'longitude']);
+      validateCoordinatePair(body.exactLatitude, body.exactLongitude, [
+        'exactLatitude',
+        'exactLongitude',
+      ]);
       const existing = await providerIdentity(user.id);
       if (existing) fail(409, 'PROVIDER_ALREADY_EXISTS', 'This account is already a provider');
-      const availability = (body.availability ?? {}) as JsonObject;
+
+      const availability = isObject(body.availability) ? body.availability : {};
+      const hours =
+        body.hours !== undefined
+          ? validateHours(body.hours)
+          : availability.pickupHours !== undefined
+            ? validateHours(availability.pickupHours)
+            : {};
+      const exactLat = body.exactLatitude === undefined ? null : Number(body.exactLatitude);
+      const exactLng = body.exactLongitude === undefined ? null : Number(body.exactLongitude);
+      const publicPoint =
+        type === 'INDIVIDUAL' && Number.isFinite(exactLat) && Number.isFinite(exactLng)
+          ? fuzzPublicPoint(user.id, exactLat, exactLng)
+          : {
+              lat: body.latitude === undefined ? null : Number(body.latitude),
+              lng: body.longitude === undefined ? null : Number(body.longitude),
+            };
+      const description = body.description ?? body.bio ?? null;
+
       const { data, error } = await db
         .from('providers')
         .insert({
           user_id: user.id,
           type,
           display_name: requireString(body.displayName, 'displayName'),
-          bio: body.bio ?? null,
+          bio: description,
+          description,
+          photo_url: body.photoUrl ?? null,
           pickup_area: requireString(body.pickupArea, 'pickupArea'),
           pickup_address: requireString(body.pickupAddress, 'pickupAddress'),
-          latitude: body.latitude ?? null,
-          longitude: body.longitude ?? null,
+          latitude: publicPoint.lat,
+          longitude: publicPoint.lng,
+          status: 'draft',
+          turnaround_days: availability.turnaroundDays ?? 3,
+          max_active_orders: availability.maxActiveOrders ?? 10,
           is_open: availability.isOpen ?? true,
           max_queue_size: availability.maxQueueSize ?? 10,
-          pickup_hours: availability.pickupHours ?? {},
+          pickup_hours: hours,
           is_verified: false,
           email_verified_at: user.email_confirmed_at ? new Date().toISOString() : null,
           phone_verified_at: user.phone_confirmed_at ? new Date().toISOString() : null,
@@ -624,39 +1213,81 @@ async function route(request: Request): Promise<Response> {
             ? 'This account is already a provider'
             : 'Could not create provider',
         );
-      const printer = body.printer as JsonObject | undefined;
-      if (printer) {
-        const { error: printerError } = await db.from('printers').insert({
-          provider_id: data.id,
-          name: requireString(printer.modelName, 'printer.modelName'),
-          model_name: requireString(printer.modelName, 'printer.modelName'),
-          build_volume: printer.buildVolume ?? { x: 220, y: 220, z: 250 },
-          materials: Array.isArray(printer.materials) ? printer.materials : ['PLA'],
-          price_per_cm3: Number(printer.pricePerCm3 ?? 0.05),
-          minimum_order: Number(printer.minimumOrder ?? 5),
-          lat: Number(body.latitude ?? 13.8708),
-          lng: Number(body.longitude ?? 100.6053),
-          location_details: body.pickupArea,
-        });
-        if (printerError)
-          fail(
-            500,
-            'PRINTER_CREATE_FAILED',
-            'Provider profile saved, but printer details could not be saved',
-          );
+      const providerRow = data as unknown as JsonObject;
+
+      const privateData: JsonObject = {};
+      if (body.exactAddress !== undefined) privateData.exact_address = body.exactAddress;
+      if (body.exactLatitude !== undefined) privateData.exact_latitude = body.exactLatitude;
+      if (body.exactLongitude !== undefined) privateData.exact_longitude = body.exactLongitude;
+      if (body.pickupInstructions !== undefined)
+        privateData.pickup_instructions = body.pickupInstructions;
+      if (body.contactPhone !== undefined) privateData.contact_phone = body.contactPhone;
+      if (Object.keys(privateData).length > 0) {
+        const { error: privateError } = await db
+          .from('provider_private')
+          .upsert({ provider_id: providerRow.id, ...privateData });
+        if (privateError)
+          fail(500, 'PROVIDER_PRIVATE_SAVE_FAILED', 'Could not save private details');
       }
-      return json(toProvider(data as unknown as JsonObject), 201);
+
+      if (body.agreements !== undefined) {
+        const agreements = validateAgreements(body.agreements);
+        const { error: agreementError } = await db.from('provider_agreements').upsert({
+          provider_id: providerRow.id,
+          liability: agreements.liability,
+          payment_terms: agreements.paymentTerms,
+          prohibited_items: agreements.prohibitedItems,
+          safe_pickup: agreements.safePickup,
+        });
+        if (agreementError)
+          fail(500, 'PROVIDER_AGREEMENTS_SAVE_FAILED', 'Could not save agreements');
+      }
+
+      const printers: EdgePrinterInput[] = [];
+      if (Array.isArray(body.printers)) {
+        for (const raw of body.printers) printers.push(validatePrinter(raw));
+      }
+      if (printers.length === 0 && isObject(body.printer)) {
+        const legacy = body.printer;
+        const materials = validateMaterials(legacy.materials);
+        const price = finiteNumber(legacy.pricePerCm3, 'printer.pricePerCm3', 0.000001, 1000);
+        const minimum = finiteNumber(legacy.minimumOrder, 'printer.minimumOrder', 0, 1000000);
+        const modelName = requireString(legacy.modelName, 'printer.modelName');
+        printers.push({
+          name: modelName,
+          modelName,
+          buildVolume: validateBuildVolume(legacy.buildVolume),
+          materials,
+          bestQuality: 'STANDARD',
+          isActive: true,
+          rates: Object.fromEntries(
+            materials.map((material) => [
+              material,
+              { ratePerCm3: price, minimumOrder: minimum, colors: [] },
+            ]),
+          ),
+        });
+      }
+      const globalRates = body.rates === undefined ? {} : validateRateMap(body.rates);
+      for (const printer of printers) {
+        for (const material of printer.materials) {
+          if (!printer.rates[material] && globalRates[material])
+            printer.rates[material] = globalRates[material];
+        }
+      }
+      await saveEdgePrinters(String(providerRow.id), printers, publicPoint);
+      return json(await extendedProvider(providerRow), 201);
+    };
+
+    if (
+      (method === 'POST' && path === '/providers') ||
+      (method === 'POST' && path === '/providers/onboard')
+    ) {
+      return createProviderFromBody(await bodyOf(request));
     }
 
     if (method === 'GET' && path === '/providers/me') {
-      const { data, error } = await db
-        .from('providers')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
-      if (!data) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
-      return json(toProvider(data as unknown as JsonObject));
+      return json(await extendedProvider(await ownedProvider()));
     }
 
     if (method === 'GET' && path === '/providers/me/printers') {
@@ -664,11 +1295,136 @@ async function route(request: Request): Promise<Response> {
       if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
       const { data, error } = await db
         .from('printers')
-        .select('*')
+        .select('*, printer_materials(*)')
         .eq('provider_id', provider.id)
         .order('created_at');
       if (error) fail(500, 'PRINTERS_FETCH_FAILED', 'Could not load your printers');
-      return json({ printers: data ?? [] });
+      return json({ printers: ((data as JsonObject[] | null) ?? []).map(toEdgePrinter) });
+    }
+
+    if (method === 'POST' && path === '/providers/me/printers') {
+      const provider = await ownedProvider();
+      const printer = validatePrinter(await bodyOf(request));
+      const point = {
+        lat: provider.latitude === null ? null : Number(provider.latitude),
+        lng: provider.longitude === null ? null : Number(provider.longitude),
+      };
+      await saveEdgePrinters(String(provider.id), [printer], point);
+      const { data, error } = await db
+        .from('printers')
+        .select('*, printer_materials(*)')
+        .eq('provider_id', provider.id)
+        .order('created_at');
+      if (error || !data?.length) fail(500, 'PRINTER_CREATE_FAILED', 'Could not create printer');
+      return json(toEdgePrinter(data[data.length - 1] as JsonObject), 201);
+    }
+
+    const printerMatch = /^\/providers\/me\/printers\/([^/]+)$/.exec(path);
+    if (printerMatch && (method === 'PATCH' || method === 'DELETE')) {
+      const printerId = decodeURIComponent(printerMatch[1]);
+      await ownedPrinter(printerId);
+      if (method === 'PATCH') {
+        const body = await bodyOf(request);
+        const updates: JsonObject = {};
+        if (body.name !== undefined) updates.name = body.name;
+        if (body.modelName !== undefined) updates.model_name = body.modelName;
+        if (body.buildVolume !== undefined)
+          updates.build_volume = validateBuildVolume(body.buildVolume);
+        if (body.materials !== undefined) updates.materials = validateMaterials(body.materials);
+        if (body.bestQuality !== undefined) {
+          if (typeof body.bestQuality !== 'string' || !QUALITIES.includes(body.bestQuality)) {
+            fail(400, 'VALIDATION_ERROR', 'Invalid quality');
+          }
+          updates.best_quality = body.bestQuality;
+        }
+        if (body.isActive !== undefined) updates.is_active = Boolean(body.isActive);
+        const { error } = await db.from('printers').update(updates).eq('id', printerId);
+        if (error) fail(500, 'PRINTER_UPDATE_FAILED', 'Could not update printer');
+        if (body.rates !== undefined) await saveEdgeRates(printerId, validateRateMap(body.rates));
+        const { data } = await db
+          .from('printers')
+          .select('*, printer_materials(*)')
+          .eq('id', printerId)
+          .maybeSingle();
+        return json(toEdgePrinter(data as unknown as JsonObject));
+      }
+      const { data: orders, error: orderError } = await db
+        .from('orders')
+        .select('id, status')
+        .eq('printer_id', printerId);
+      if (orderError) fail(500, 'ORDER_FETCH_FAILED', 'Could not check printer orders');
+      const hasActive = ((orders as JsonObject[] | null) ?? []).some(
+        (order) => !['DECLINED', 'CANCELLED'].includes(String(order.status)),
+      );
+      if (hasActive) {
+        fail(
+          409,
+          'PRINTER_HAS_ACTIVE_ORDERS',
+          'This printer has active orders and cannot be deleted',
+        );
+      }
+      await db.from('printer_materials').delete().eq('printer_id', printerId);
+      const { error } = await db.from('printers').delete().eq('id', printerId);
+      if (error) fail(500, 'PRINTER_DELETE_FAILED', 'Could not delete printer');
+      return json({ success: true });
+    }
+
+    const materialsMatch = /^\/providers\/me\/printers\/([^/]+)\/materials$/.exec(path);
+    if (method === 'PUT' && materialsMatch) {
+      const printerId = decodeURIComponent(materialsMatch[1]);
+      await ownedPrinter(printerId);
+      const body = await bodyOf(request);
+      const materials = validateMaterials(body.materials);
+      const rates = validateRateMap(body.rates);
+      const missing = materials.filter((material) => !rates[material]);
+      if (missing.length > 0) {
+        fail(400, 'VALIDATION_ERROR', `A rate is required for: ${missing.join(', ')}`);
+      }
+      const { error } = await db.from('printers').update({ materials }).eq('id', printerId);
+      if (error) fail(500, 'PRINTER_UPDATE_FAILED', 'Could not update printer materials');
+      await saveEdgeRates(printerId, rates);
+      await db
+        .from('printer_materials')
+        .delete()
+        .eq('printer_id', printerId)
+        .not('material', 'in', `(${materials.join(',')})`);
+      const { data } = await db
+        .from('printers')
+        .select('*, printer_materials(*)')
+        .eq('id', printerId)
+        .maybeSingle();
+      return json(toEdgePrinter(data as unknown as JsonObject));
+    }
+
+    if (method === 'PUT' && path === '/providers/me/hours') {
+      const provider = await ownedProvider();
+      const body = await bodyOf(request);
+      const hours = validateHours(isObject(body) && isObject(body.hours) ? body.hours : body);
+      const merged = { ...((provider.pickup_hours as JsonObject | null) ?? {}), ...hours };
+      const { error } = await db
+        .from('providers')
+        .update({ pickup_hours: merged, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) fail(500, 'PROVIDER_UPDATE_FAILED', 'Could not update pickup hours');
+      return json({ hours: merged });
+    }
+
+    if (method === 'POST' && path === '/providers/me/activate') {
+      const provider = await ownedProvider();
+      const profile = await extendedProvider(provider);
+      if (profile.setup.missing.length > 0) {
+        fail(
+          422,
+          'PROVIDER_SETUP_INCOMPLETE',
+          `Complete your setup before activation: ${profile.setup.missing.join(', ')}`,
+        );
+      }
+      const { error } = await db
+        .from('providers')
+        .update({ status: 'active', updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) fail(500, 'PROVIDER_UPDATE_FAILED', 'Could not activate provider');
+      return json(await extendedProvider(await ownedProvider()));
     }
 
     if (method === 'GET' && path === '/providers/me/orders') {
@@ -691,39 +1447,115 @@ async function route(request: Request): Promise<Response> {
     }
 
     if (method === 'PATCH' && path === '/providers/me') {
+      const provider = await ownedProvider();
       const body = await bodyOf(request);
-      const { data: current, error: currentError } = await db
-        .from('providers')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (currentError) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
-      if (!current) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
+      validateCoordinatePair(body.latitude, body.longitude, ['latitude', 'longitude']);
+      validateCoordinatePair(body.exactLatitude, body.exactLongitude, [
+        'exactLatitude',
+        'exactLongitude',
+      ]);
+      if (body.status === 'active') {
+        const profile = await extendedProvider(provider);
+        if (profile.setup.missing.length > 0) {
+          fail(
+            422,
+            'PROVIDER_SETUP_INCOMPLETE',
+            `Complete your setup before activation: ${profile.setup.missing.join(', ')}`,
+          );
+        }
+      }
       const updates: JsonObject = { updated_at: new Date().toISOString() };
       if (body.displayName !== undefined) updates.display_name = body.displayName;
       if (body.bio !== undefined) updates.bio = body.bio;
+      if (body.description !== undefined) {
+        updates.description = body.description;
+        updates.bio = body.description;
+      }
+      if (body.photoUrl !== undefined) updates.photo_url = body.photoUrl;
+      if (body.type !== undefined) updates.type = body.type;
+      if (body.status !== undefined) updates.status = body.status;
       if (body.pickupArea !== undefined) updates.pickup_area = body.pickupArea;
       if (body.pickupAddress !== undefined) updates.pickup_address = body.pickupAddress;
-      const availability = body.availability as JsonObject | undefined;
-      if (availability) {
-        if (availability.isOpen !== undefined) updates.is_open = availability.isOpen;
-        if (availability.maxQueueSize !== undefined)
-          updates.max_queue_size = availability.maxQueueSize;
-        if (availability.pickupHours !== undefined) {
-          updates.pickup_hours = {
-            ...(current.pickup_hours ?? {}),
-            ...(availability.pickupHours as object),
-          };
+      if (body.latitude !== undefined) updates.latitude = body.latitude;
+      if (body.longitude !== undefined) updates.longitude = body.longitude;
+      if (body.turnaroundDays !== undefined) updates.turnaround_days = body.turnaroundDays;
+      if (body.maxActiveOrders !== undefined) updates.max_active_orders = body.maxActiveOrders;
+      const availability = isObject(body.availability) ? body.availability : {};
+      if (availability.isOpen !== undefined) updates.is_open = availability.isOpen;
+      if (availability.maxQueueSize !== undefined)
+        updates.max_queue_size = availability.maxQueueSize;
+      if (availability.turnaroundDays !== undefined)
+        updates.turnaround_days = availability.turnaroundDays;
+      if (availability.maxActiveOrders !== undefined)
+        updates.max_active_orders = availability.maxActiveOrders;
+      const hours = body.hours ?? availability.pickupHours;
+      if (hours !== undefined) {
+        updates.pickup_hours = {
+          ...((provider.pickup_hours as JsonObject | null) ?? {}),
+          ...validateHours(hours),
+        };
+      }
+
+      const privateData: JsonObject = {};
+      if (body.exactAddress !== undefined) privateData.exact_address = body.exactAddress;
+      if (body.exactLatitude !== undefined) privateData.exact_latitude = body.exactLatitude;
+      if (body.exactLongitude !== undefined) privateData.exact_longitude = body.exactLongitude;
+      if (body.pickupInstructions !== undefined)
+        privateData.pickup_instructions = body.pickupInstructions;
+      if (body.contactPhone !== undefined) privateData.contact_phone = body.contactPhone;
+      if (Object.keys(privateData).length > 0) {
+        const { error } = await db
+          .from('provider_private')
+          .upsert({ provider_id: provider.id, ...privateData });
+        if (error) fail(500, 'PROVIDER_PRIVATE_SAVE_FAILED', 'Could not save private details');
+      }
+
+      if (body.agreements !== undefined) {
+        const current = await extendedProvider(provider);
+        validateAgreements(body.agreements);
+        const raw = body.agreements as JsonObject;
+        const merged = {
+          liability:
+            raw.liability === undefined ? current.agreements.liability : Boolean(raw.liability),
+          paymentTerms:
+            raw.paymentTerms === undefined
+              ? current.agreements.paymentTerms
+              : Boolean(raw.paymentTerms),
+          prohibitedItems:
+            raw.prohibitedItems === undefined
+              ? current.agreements.prohibitedItems
+              : Boolean(raw.prohibitedItems),
+          safePickup:
+            raw.safePickup === undefined ? current.agreements.safePickup : Boolean(raw.safePickup),
+        };
+        const { error } = await db.from('provider_agreements').upsert({
+          provider_id: provider.id,
+          liability: merged.liability,
+          payment_terms: merged.paymentTerms,
+          prohibited_items: merged.prohibitedItems,
+          safe_pickup: merged.safePickup,
+        });
+        if (error) fail(500, 'PROVIDER_AGREEMENTS_SAVE_FAILED', 'Could not save agreements');
+      }
+
+      if (body.rates !== undefined) {
+        const rates = validateRateMap(body.rates);
+        const { data: printers } = await db
+          .from('printers')
+          .select('id, materials')
+          .eq('provider_id', provider.id);
+        for (const printer of (printers as JsonObject[] | null) ?? []) {
+          for (const [material, rate] of Object.entries(rates)) {
+            if (((printer.materials as string[] | null) ?? []).includes(material)) {
+              await saveEdgeRates(String(printer.id), { [material]: rate });
+            }
+          }
         }
       }
-      const { data, error } = await db
-        .from('providers')
-        .update(updates)
-        .eq('user_id', user.id)
-        .select('*')
-        .single();
-      if (error || !data) fail(500, 'PROVIDER_UPDATE_FAILED', 'Could not update provider profile');
-      return json(toProvider(data as unknown as JsonObject));
+
+      const { error } = await db.from('providers').update(updates).eq('user_id', user.id);
+      if (error) fail(500, 'PROVIDER_UPDATE_FAILED', 'Could not update provider profile');
+      return json(await extendedProvider(await ownedProvider()));
     }
   }
 

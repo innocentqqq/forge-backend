@@ -3,6 +3,7 @@ import type {
   Material,
   ModelMetadata,
   Order,
+  ProviderType,
   Quality,
   Sort,
 } from '@forge/types';
@@ -15,7 +16,11 @@ export interface ModelDetails extends ModelMetadata {
 
 export interface ProviderResult {
   id: string;
+  type?: ProviderType;
   displayName: string;
+  description?: string | null;
+  photoUrl?: string | null;
+  isVerified?: boolean;
   distanceKm: number | null;
   estimate: number;
   availability: string;
