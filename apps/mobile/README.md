@@ -103,7 +103,11 @@ each step, so you can leave and come back:
 4. Set a rate per cm³, minimum order, and colours for each selected material.
 5. Set accepting-orders state, turnaround, queue limits, and weekly pickup hours.
 6. Review the checklist and accept the agreements, then tap **Activate provider profile**. The
-   dashboard opens and the provider appears in search only when the checklist is complete.
+   provider workspace opens and the provider appears in search only when the checklist is complete.
+
+Activated providers get a separate dashboard/Jobs/Shop navigator with a dark tab bar. Use
+**Customer mode** in its header, or **Profile → Open provider dashboard**, to switch between the
+customer and provider sides of the same account. A draft profile keeps opening the wizard.
 
 In mock mode all of this is in memory; restart the app to reset it.
 
@@ -120,9 +124,9 @@ In mock mode all of this is in memory; restart the app to reset it.
 5. The tracking screen shows the status timeline and the same model building up
    bottom-to-top in 3D over 60 seconds. It polls every second while focused and stops
    when the order is ready.
-6. Optional: open **Profile → Become a provider** and the incoming order to see the same
-   progress from the provider side. The **Start 60-second demo print** button is still
-   available there, but it is not needed for the mock customer flow.
+6. Optional: complete provider onboarding, then open **Profile → Open provider dashboard** and
+   the incoming order to see the same progress from the provider side. The **Start 60-second
+   demo print** button is still available there, but it is not needed for the mock customer flow.
 
 ### Two-device real demo
 

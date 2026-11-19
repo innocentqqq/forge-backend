@@ -14,6 +14,7 @@ export default function ProfileScreen() {
   const { signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [hasProviderProfile, setHasProviderProfile] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +28,12 @@ export default function ProfileScreen() {
       ]);
       setProfile(nextProfile);
       setStats(nextStats);
+      try {
+        const provider = await api.getMyProvider();
+        setHasProviderProfile(provider.status !== 'draft');
+      } catch {
+        setHasProviderProfile(false);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load profile');
     } finally {
@@ -93,12 +100,18 @@ export default function ProfileScreen() {
 
         <View style={styles.maker}>
           <Text style={styles.makerTitle}>Maker mode</Text>
-          <Text style={styles.makerCopy}>List your printer and earn from print jobs nearby.</Text>
+          <Text style={styles.makerCopy}>
+            {hasProviderProfile
+              ? 'Manage your shop, printers, and incoming print jobs.'
+              : 'List your printer and earn from print jobs nearby.'}
+          </Text>
           <Button
-            title="Become a provider"
+            title={hasProviderProfile ? 'Open provider dashboard' : 'Become a provider'}
             size="sm"
             labelSize="md"
-            onPress={() => router.push('/provider-onboarding' as never)}
+            onPress={() =>
+              router.push((hasProviderProfile ? '/provider' : '/provider-onboarding') as never)
+            }
             style={styles.makerButton}
           />
         </View>
