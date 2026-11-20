@@ -1,5 +1,5 @@
-import type { ParsedModel, Triangle } from './types';
-import { computeMeshMetrics } from './utils';
+import type { ParsedModel, Triangle } from './types.ts';
+import { computeMeshMetrics } from './utils.ts';
 
 /**
  * Parses a Wavefront OBJ file and calculates triangle count,

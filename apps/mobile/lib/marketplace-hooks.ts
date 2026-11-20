@@ -2,15 +2,12 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { api, USE_MOCK_API } from './api';
 import type { MarketplaceOrder } from './marketplace-types';
+import { ORDER_POLL_COMPLETE_STATUSES } from './order-status';
 
 const POLL_INTERVAL_MS = USE_MOCK_API ? 1000 : 3000;
 
 function isOrderComplete(order: MarketplaceOrder) {
-  return (
-    order.status === 'READY_FOR_PICKUP' ||
-    order.status === 'DECLINED' ||
-    order.status === 'CANCELLED'
-  );
+  return ORDER_POLL_COMPLETE_STATUSES.includes(order.status);
 }
 
 export function useMarketplaceOrders() {
@@ -38,10 +35,14 @@ export function useMarketplaceOrder(id: string | undefined) {
   const [order, setOrder] = useState<MarketplaceOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshToken, setRefreshToken] = useState(0);
   const completeRef = useRef(false);
+  const reload = useCallback(() => setRefreshToken((token) => token + 1), []);
 
   useFocusEffect(
     useCallback(() => {
+      // `reload()` bumps this token to restart the focus/poll effect immediately.
+      void refreshToken;
       let focused = true;
       let timer: ReturnType<typeof setInterval> | undefined;
       completeRef.current = false;
@@ -71,8 +72,8 @@ export function useMarketplaceOrder(id: string | undefined) {
         focused = false;
         if (timer) clearInterval(timer);
       };
-    }, [id]),
+    }, [id, refreshToken]),
   );
 
-  return { order, loading, error };
+  return { order, loading, error, reload };
 }

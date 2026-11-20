@@ -21,12 +21,12 @@ cp .env.example .env   # already created; edit it
 
 Fill in:
 
-| Variable | Where to get it |
-|---|---|
-| `EXPO_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → Data API |
-| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API Keys → **publishable/anon** key |
-| `EXPO_PUBLIC_API_URL` | Optional. Defaults to the project's `forge-api` Supabase Edge Function |
-| `EXPO_PUBLIC_API_MODE` | Optional. `mock` (default) or `real` to use the Forge API |
+| Variable                        | Where to get it                                                        |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| `EXPO_PUBLIC_SUPABASE_URL`      | Supabase → Project Settings → Data API                                 |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API Keys → **publishable/anon** key      |
+| `EXPO_PUBLIC_API_URL`           | Optional. Defaults to the project's `forge-api` Supabase Edge Function |
+| `EXPO_PUBLIC_API_MODE`          | Optional. `mock` (default) or `real` to use the Forge API              |
 
 > Never put the `service_role` or `sb_secret_...` key in this app. Mobile bundles are
 > readable by anyone. Use the publishable/anon key only.
@@ -58,7 +58,6 @@ The sign-in screen keeps the existing-account rule: if Google OAuth creates a ne
 while signing in, the API removes that new account and asks the user to sign up instead.
 The sign-up screen accepts the new account. The app calls the deployed
 `POST /auth/oauth-signin-check` endpoint through the `forge-api` Edge Function.
-
 
 ## 2. Deploy the Supabase API
 
@@ -115,31 +114,46 @@ In mock mode all of this is in memory; restart the app to reset it.
 
 1. Open `/dev/viewer` once to confirm the real 3D viewer renders (`expo://<tunnel>/--/dev/viewer`).
 2. Sign in, then use **Upload** to pick an STL or OBJ file. Mock mode keeps the picked file
-   on the device and previews that exact model — no bundled cube substitute. 3MF uploads are
-   accepted by the picker, but 3MF previews are not supported yet.
+   on the device and previews that exact model — no bundled cube substitute. 3MF files are
+   rejected with a clear message because parsing and previews are not supported yet.
 3. On **Print settings**, confirm the live 3D preview, dimensions, volume, and estimate. These
    are measured from the file you selected.
 4. Choose a provider and place the order. Mock mode skips provider acceptance entirely:
    the order starts printing immediately and the app opens the tracking screen.
 5. The tracking screen shows the status timeline and the same model building up
-   bottom-to-top in 3D over 60 seconds. It polls every second while focused and stops
-   when the order is ready.
+   bottom-to-top in 3D over 60 seconds. It polls every second while focused. When the print is
+   ready, tap **I picked it up**; if you also completed provider onboarding, switch to provider
+   mode and tap **Complete order** to see the final `Completed` state. Mock mode shares the same
+   in-memory order across both modes on one device.
 6. Optional: complete provider onboarding, then open **Profile → Open provider dashboard** and
    the incoming order to see the same progress from the provider side. The **Start 60-second
    demo print** button is still available there, but it is not needed for the mock customer flow.
 
 ### Two-device real demo
 
-Deploy the models, pricing, provider, and order endpoints, apply the latest Supabase
-migrations, set `EXPO_PUBLIC_API_MODE=real` in `apps/mobile/.env`, and restart Expo.
+Prerequisites: the `forge-api` Edge Function is deployed, all Supabase migrations are applied,
+and `apps/mobile/.env` contains `EXPO_PUBLIC_API_MODE=real`. Restart Expo and do a full reload
+on both phones after changing the flag. Use two separate Supabase accounts; an account cannot
+order from its own provider profile.
 
-1. Sign in on both devices with separate customer/provider accounts.
-2. Customer: upload a model, configure the print, choose a provider, and place the order.
-3. Provider: onboard a printer, refresh incoming orders, and tap **Start 60-second demo print**.
-4. Customer: open the order tracker. The API derives progress from `demo_started_at`, so the
-   3D preview advances on both devices without a manual slider.
+1. Provider phone: sign in, open **Profile → Become a provider**, complete the six steps
+   (pickup area, FDM printer, PLA/ABS/PETG/TPU rates, hours, agreements), and activate.
+2. Customer phone: sign in with the other account, upload an STL or OBJ file, confirm the
+   dimensions/volume/estimate, choose the provider, and place the order. An individual provider
+   creates a pending request; a lab order is confirmed immediately.
+3. Provider phone: open **Provider → Jobs**, then open the new order. Accept it if it is
+   pending, then tap **Start 60-second demo print**. The button is on the order detail screen,
+   not on the job card.
+4. Customer phone: open the tracker from confirmation or **Orders → the new order**. It polls
+   every 3 seconds while focused; the 3D model builds from bottom to top as the API projects
+   progress from `demo_started_at`. The provider's detail screen updates from the same source.
+5. When the tracker reaches **Ready for pickup**, the customer taps **I picked it up**. The
+   provider screen changes to **Complete order**; tap it to close the order. The customer's
+   tracker then shows **Completed**. Polling only stops on `Completed`, `Declined`, or `Cancelled`.
 
-A manual progress/status update cancels the demo projection.
+A manual progress/status update cancels the demo projection and hands control back to the
+provider's slider/status buttons. The final handoff is role-protected: only the customer can set
+`PICKED_UP`, and only the provider can set `COMPLETED`.
 
 ## Feature limitations
 

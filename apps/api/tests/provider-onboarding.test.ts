@@ -17,11 +17,19 @@ import {
 } from '../src/modules/providers/providers.schemas';
 import { fuzzPublicPoint } from '../src/modules/providers/providers.privacy';
 import {
+  assertStatusForRole,
+  assertTransition,
+  updateProgress,
+  updateStatus,
+} from '../src/modules/orders/orders.service';
+import {
   activateProvider,
   deleteMyPrinter,
   updateMyHours,
+  updateMyProvider,
 } from '../src/modules/providers/providers.service';
 import { haversineKm, searchProviders } from '../src/modules/providers/providers.search';
+import type { OrderRow } from '../src/modules/orders/orders.types';
 import type { PrinterRow, ProviderRow } from '../src/modules/providers/providers.types';
 import {
   addressForOrder,
@@ -121,6 +129,38 @@ function printerRow(overrides: Partial<PrinterRow> = {}): PrinterRow {
     printer_materials: [
       { material: 'PLA', rate_per_cm3: 0.06, minimum_order: 5, colors: ['black'] },
     ],
+    ...overrides,
+  };
+}
+
+function orderRow(overrides: Partial<OrderRow> = {}): OrderRow {
+  return {
+    id: 'order-1',
+    order_number: 'F0RGE01',
+    user_id: 'customer-user',
+    model_id: 'model-1',
+    printer_id: 'printer-1',
+    material: 'PLA',
+    quality: 'STANDARD',
+    color: null,
+    payment_method: null,
+    infill: 20,
+    quantity: 1,
+    price_snapshot: 12.5,
+    status: 'READY_FOR_PICKUP',
+    progress: 100,
+    demo_started_at: null,
+    eta: null,
+    created_at: '2026-11-21T00:00:00.000Z',
+    updated_at: '2026-11-21T00:00:00.000Z',
+    printers: {
+      id: 'printer-1',
+      name: 'Prusa MK4',
+      provider_id: 'provider-1',
+      build_volume: { x: 220, y: 220, z: 250 },
+      materials: ['PLA'],
+      price_per_cm3: 0.05,
+    },
     ...overrides,
   };
 }
@@ -293,6 +333,47 @@ describe('provider setup and ownership', () => {
     expect(profile.status).toBe('active');
     expect(profile.setup.canAppearInSearch).toBe(true);
     expect(profile.rates.PLA?.ratePerCm3).toBe(0.06);
+  });
+
+  it('saves printers and global rates supplied on a profile update', async () => {
+    setQueries({
+      providers: { data: providerRow(), error: null },
+      provider_private: { data: null, error: null },
+      printers: { data: [printerRow()], error: null },
+      orders: { data: [], error: null },
+      provider_agreements: {
+        data: {
+          provider_id: 'provider-1',
+          liability: true,
+          payment_terms: true,
+          prohibited_items: true,
+          safe_pickup: true,
+        },
+        error: null,
+      },
+      printer_materials: { data: [], error: null },
+    });
+    fromMock('printers').single.mockResolvedValue({ data: printerRow(), error: null });
+
+    const profile = await updateMyProvider(
+      'user-1',
+      updateProviderSchema.parse({
+        printers: [
+          {
+            name: 'Lab printer 1',
+            modelName: 'Prusa MK4',
+            buildVolume: { x: 220, y: 220, z: 250 },
+            materials: ['PLA'],
+            isActive: true,
+          },
+        ],
+        rates: { PLA: { ratePerCm3: 0.05, minimumOrder: 0, colors: ['black'] } },
+      }),
+    );
+
+    expect(profile.setup.hasActivePrinter).toBe(true);
+    expect(profile.setup.hasMaterialRate).toBe(true);
+    expect(profile.setup.missing).toEqual([]);
   });
 
   it('merges pickup hours without replacing other days', async () => {
@@ -535,8 +616,101 @@ describe('order provider checks', () => {
     expect(addressForOrder('READY_FOR_PICKUP', 'INDIVIDUAL', null, 'Public area')).toBe(
       'Public area',
     );
+    expect(addressForOrder('PICKED_UP', 'INDIVIDUAL', '123 Secret', 'Public area')).toBe(
+      '123 Secret',
+    );
     expect(addressForOrder('PENDING_ACCEPTANCE', 'LAB', '123 Secret', 'Public area')).toBe(
       'Public area',
     );
+  });
+});
+
+describe('order pickup and completion handoff', () => {
+  function setHandoffQueries(
+    status: OrderRow['status'],
+    nextStatus: OrderRow['status'] = status,
+    currentOverrides: Partial<OrderRow> = {},
+  ): void {
+    setQueries({
+      orders: { data: orderRow({ status: nextStatus, progress: 100 }), error: null },
+      printers: { data: { id: 'printer-1', provider_id: 'provider-1' }, error: null },
+      providers: {
+        data: providerRow({ user_id: 'provider-user', type: 'INDIVIDUAL' }),
+        error: null,
+      },
+      provider_private: { data: null, error: null },
+      order_status_events: { data: [], error: null },
+    });
+    fromMock('orders')
+      .maybeSingle.mockReset()
+      .mockResolvedValueOnce({
+        data: orderRow({ status, progress: 100, ...currentOverrides }),
+        error: null,
+      })
+      .mockResolvedValue({ data: orderRow({ status: nextStatus, progress: 100 }), error: null });
+  }
+
+  it('allows the final transitions only in handoff order', () => {
+    expect(() => assertTransition('READY_FOR_PICKUP', 'PICKED_UP')).not.toThrow();
+    expect(() => assertTransition('PICKED_UP', 'COMPLETED')).not.toThrow();
+    expect(() => assertTransition('READY_FOR_PICKUP', 'COMPLETED')).toThrow(
+      'Cannot change order status from READY_FOR_PICKUP to COMPLETED',
+    );
+    expect(() => assertStatusForRole(true, 'PICKED_UP')).not.toThrow();
+    expect(() => assertStatusForRole(false, 'PICKED_UP')).toThrow('Only the customer');
+  });
+
+  it('lets the customer confirm pickup', async () => {
+    setHandoffQueries('READY_FOR_PICKUP', 'PICKED_UP');
+    const updated = await updateStatus('customer-user', 'order-1', {
+      status: 'PICKED_UP',
+      notes: 'Customer confirmed pickup.',
+    });
+    expect(updated.status).toBe('PICKED_UP');
+    expect(updated.progress).toBe(100);
+  });
+
+  it('accepts pickup from a projected ready state while the demo is running', async () => {
+    setHandoffQueries('CONFIRMED', 'PICKED_UP', {
+      demo_started_at: new Date(Date.now() - 61_000).toISOString(),
+      progress: 20,
+    });
+    const updated = await updateStatus('customer-user', 'order-1', {
+      status: 'PICKED_UP',
+      notes: 'Customer confirmed pickup.',
+    });
+    expect(updated.status).toBe('PICKED_UP');
+    expect(updated.progress).toBe(100);
+  });
+
+  it('rejects a provider confirming pickup', async () => {
+    setHandoffQueries('READY_FOR_PICKUP');
+    await expect(
+      updateStatus('provider-user', 'order-1', { status: 'PICKED_UP' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('rejects a customer completing the order', async () => {
+    setHandoffQueries('PICKED_UP');
+    await expect(
+      updateStatus('customer-user', 'order-1', { status: 'COMPLETED' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('lets the provider complete a picked-up order', async () => {
+    setHandoffQueries('PICKED_UP', 'COMPLETED');
+    const updated = await updateStatus('provider-user', 'order-1', {
+      status: 'COMPLETED',
+      notes: 'Handoff complete.',
+    });
+    expect(updated.status).toBe('COMPLETED');
+    expect(updated.progress).toBe(100);
+  });
+
+  it('rejects pickup through the provider progress endpoint', async () => {
+    setHandoffQueries('READY_FOR_PICKUP');
+    await expect(
+      updateProgress('provider-user', 'order-1', { progress: 100, status: 'PICKED_UP' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

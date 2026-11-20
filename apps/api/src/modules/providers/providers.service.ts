@@ -186,7 +186,9 @@ function toPreparedRates(
   return result;
 }
 
-function preparePrinters(input: CreateProviderInput): PreparedPrinter[] {
+function preparePrinters(
+  input: Pick<CreateProviderInput, 'printers' | 'printer' | 'rates'>,
+): PreparedPrinter[] {
   const printers: PreparedPrinter[] = (input.printers ?? []).map((printer) => ({
     name: printer.name,
     modelName: printer.modelName ?? printer.name,
@@ -264,6 +266,46 @@ async function savePrinters(
       );
     }
   }
+}
+
+async function replacePrinters(
+  providerId: string,
+  printers: PreparedPrinter[],
+  point: { lat: number | null; lng: number | null },
+): Promise<void> {
+  const existing = await selectMany<PrinterRow>('printers', 'id', [['provider_id', providerId]]);
+  if (existing.length > 0) {
+    const activeOrders: Array<{ id: string; status: string }> = [];
+    for (const printer of existing) {
+      const orders = await selectMany<{ id: string; status: string }>('orders', 'id, status', [
+        ['printer_id', printer.id],
+      ]);
+      activeOrders.push(
+        ...orders.filter((order) => !['DECLINED', 'CANCELLED'].includes(order.status)),
+      );
+    }
+    if (activeOrders.length > 0) {
+      throw new AppError(
+        409,
+        'PRINTER_HAS_ACTIVE_ORDERS',
+        'A printer has active orders and cannot be replaced',
+      );
+    }
+    const ids = existing.map((printer) => printer.id);
+    for (const id of ids) {
+      const { error } = await table<PrinterMaterialRow>('printer_materials')
+        .delete()
+        .eq('printer_id', id)
+        .select('printer_id');
+      if (error) throw databaseError('PRINTER_DELETE_FAILED', 'Could not replace printer rates');
+    }
+    const { error } = await table<PrinterRow>('printers')
+      .delete()
+      .eq('provider_id', providerId)
+      .select('id');
+    if (error) throw databaseError('PRINTER_DELETE_FAILED', 'Could not replace printers');
+  }
+  await savePrinters(providerId, printers, point);
 }
 
 function privateFields(input: CreateProviderInput | UpdateProviderInput): Record<string, unknown> {
@@ -475,7 +517,13 @@ export async function updateMyProvider(
     );
   }
 
-  if (input.rates) {
+  const requestedPrinters = preparePrinters(input);
+  if (requestedPrinters.length > 0) {
+    await replacePrinters(current.id, requestedPrinters, {
+      lat: current.latitude ?? null,
+      lng: current.longitude ?? null,
+    });
+  } else if (input.rates) {
     const printers = await selectMany<PrinterRow>('printers', '*', [['provider_id', current.id]]);
     for (const [material, rate] of Object.entries(input.rates)) {
       for (const printer of printers) {

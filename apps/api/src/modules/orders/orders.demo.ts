@@ -9,7 +9,16 @@ export const DEMO_DURATION_MS = 60_000;
  */
 export function projectDemoOrder(order: OrderRow, now = Date.now()): OrderRow {
   if (!order.demo_started_at) return order;
-  if (order.status === 'DECLINED' || order.status === 'CANCELLED') return order;
+  const currentStatus = order.status;
+  if (
+    currentStatus === 'DECLINED' ||
+    currentStatus === 'CANCELLED' ||
+    currentStatus === 'READY_FOR_PICKUP' ||
+    currentStatus === 'PICKED_UP' ||
+    currentStatus === 'COMPLETED'
+  ) {
+    return order;
+  }
 
   const startedAt = Date.parse(order.demo_started_at);
   if (!Number.isFinite(startedAt)) return order;

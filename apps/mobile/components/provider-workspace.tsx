@@ -13,6 +13,7 @@ import { Icon, icons } from './icons';
 import { api, ApiError } from '../lib/api';
 import { formatDate, formatMoney, STATUS_LABELS } from '../lib/format';
 import { fonts } from '../lib/fonts';
+import { progressForStatus } from '../lib/order-status';
 import { colors, radius } from '../lib/theme';
 import type { Quality } from '../lib/types';
 import type { MarketplaceOrder } from '../lib/marketplace-types';
@@ -40,21 +41,6 @@ const FILTERS: { key: OrderFilter; label: string }[] = [
   { key: 'active', label: 'In progress' },
   { key: 'done', label: 'Finished' },
 ];
-
-function progressForStatus(status: MarketplaceOrder['status']) {
-  switch (status) {
-    case 'PENDING_ACCEPTANCE':
-    case 'CONFIRMED':
-    case 'IN_QUEUE':
-      return 0;
-    case 'PRINTING':
-      return 10;
-    case 'READY_FOR_PICKUP':
-      return 100;
-    default:
-      return 0;
-  }
-}
 
 function statusLabel(provider: ProviderProfile) {
   if (!provider.availability.isOpen) return 'Paused';
@@ -291,7 +277,7 @@ function DashboardSection({
       return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
     });
     const revenue = thisMonth.reduce((total, order) => total + Number(order.price_snapshot), 0);
-    const completed = thisMonth.filter((order) => order.status === 'READY_FOR_PICKUP').length;
+    const completed = thisMonth.filter((order) => order.status === 'COMPLETED').length;
     return { revenue, completed };
   }, [orders]);
 
@@ -375,7 +361,7 @@ function OrdersSection({
         );
       case 'done':
         return orders.filter((order) =>
-          ['READY_FOR_PICKUP', 'DECLINED', 'CANCELLED'].includes(order.status),
+          ['PICKED_UP', 'COMPLETED', 'DECLINED', 'CANCELLED'].includes(order.status),
         );
       default:
         return orders;
@@ -489,6 +475,14 @@ function OrderCard({
             size="sm"
             labelSize="md"
             onPress={() => onUpdateStatus(order, 'READY_FOR_PICKUP')}
+            style={styles.flex}
+          />
+        ) : order.status === 'PICKED_UP' ? (
+          <Button
+            title="Complete order"
+            size="sm"
+            labelSize="md"
+            onPress={() => onUpdateStatus(order, 'COMPLETED')}
             style={styles.flex}
           />
         ) : (

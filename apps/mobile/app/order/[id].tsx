@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ModelViewer } from '../../components/ModelViewer';
-import { AppHeader, ErrorView, LoadingView, ProgressBar, Screen, StatusPill } from '../../components/ui';
+import { AppHeader, Button, ErrorView, LoadingView, ProgressBar, Screen, StatusPill } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
 import { resolveViewerSource } from '../../lib/model-preview';
@@ -10,10 +10,8 @@ import { useMarketplaceOrder } from '../../lib/marketplace-hooks';
 import type { ModelDetails } from '../../lib/marketplace-types';
 import { formatMoney, STATUS_LABELS } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
+import { ORDER_STAGES, PRINT_COMPLETE_STATUSES } from '../../lib/order-status';
 import { colors, radius, shadow } from '../../lib/theme';
-import type { OrderStatus } from '../../lib/types';
-
-const STAGES: OrderStatus[] = ['PENDING_ACCEPTANCE', 'CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
 
 function etaLabel(eta: string | null) {
   if (!eta) return 'Provider to confirm';
@@ -27,10 +25,12 @@ function etaLabel(eta: string | null) {
 export default function OrderTrackingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { order, loading, error } = useMarketplaceOrder(id);
+  const { order, loading, error, reload } = useMarketplaceOrder(id);
   const [model, setModel] = useState<ModelDetails | null>(null);
   const [modelError, setModelError] = useState('');
   const [viewerInteracting, setViewerInteracting] = useState(false);
+  const [pickupBusy, setPickupBusy] = useState(false);
+  const [pickupError, setPickupError] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -51,9 +51,27 @@ export default function OrderTrackingScreen() {
   }
   if (!order) return <Screen><AppHeader back /><ErrorView message="Order not found." onRetry={() => router.replace('/orders')} /></Screen>;
 
-  const currentIndex = STAGES.indexOf(order.status);
-  const progress = order.status === 'READY_FOR_PICKUP' ? 100 : Math.max(0, Math.min(100, order.progress));
+  const currentIndex = ORDER_STAGES.indexOf(order.status);
+  const progress = PRINT_COMPLETE_STATUSES.includes(order.status)
+    ? 100
+    : Math.max(0, Math.min(100, order.progress));
   const preview = model ? resolveViewerSource(model) : null;
+  const confirmPickup = async () => {
+    setPickupBusy(true);
+    setPickupError('');
+    try {
+      await api.updateMarketplaceStatus(
+        order.id,
+        'PICKED_UP',
+        'Customer confirmed pickup.',
+      );
+      reload();
+    } catch (err) {
+      setPickupError(err instanceof Error ? err.message : 'Could not confirm pickup.');
+    } finally {
+      setPickupBusy(false);
+    }
+  };
   const openDirections = () => {
     const providerName = order.printers?.name ?? '3D printing provider';
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(providerName)}`;
@@ -75,7 +93,16 @@ export default function OrderTrackingScreen() {
         <View style={styles.summary}>
           <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
           <Text style={styles.provider}>{order.printers?.name ?? 'Your provider'}</Text>
-          <StatusPill label={STATUS_LABELS[order.status] ?? order.status} tone={order.status === 'DECLINED' || order.status === 'CANCELLED' ? 'info' : 'queued'} />
+          <StatusPill
+            label={STATUS_LABELS[order.status] ?? order.status}
+            tone={
+              order.status === 'DECLINED' || order.status === 'CANCELLED'
+                ? 'info'
+                : PRINT_COMPLETE_STATUSES.includes(order.status)
+                  ? 'done'
+                  : 'queued'
+            }
+          />
           <Text style={styles.meta}>{order.material} · {order.quality} · Qty {order.quantity}</Text>
           <Text style={styles.meta}>Estimate · {formatMoney(order.price_snapshot)}</Text>
           {error ? <Text accessibilityRole="alert" style={styles.pollError}>Could not refresh: {error}</Text> : null}
@@ -96,8 +123,8 @@ export default function OrderTrackingScreen() {
         {modelError ? <Text accessibilityRole="alert" style={styles.pollError}>{modelError}</Text> : null}
 
         <View style={styles.timeline}>
-          {STAGES.map((stage, index) => {
-            const done = currentIndex > index || order.status === 'READY_FOR_PICKUP' && index < STAGES.length - 1;
+          {ORDER_STAGES.map((stage, index) => {
+            const done = currentIndex > index;
             const current = currentIndex === index;
             const color = done ? colors.success : current ? colors.printing : colors.queued;
             return (
@@ -106,7 +133,7 @@ export default function OrderTrackingScreen() {
                   <View style={[styles.dot, { backgroundColor: color }]}>
                     {done ? <Icon name={icons.check} size={13} color={colors.text} /> : null}
                   </View>
-                  {index < STAGES.length - 1 ? <View style={[styles.line, done && styles.lineDone]} /> : null}
+                  {index < ORDER_STAGES.length - 1 ? <View style={[styles.line, done && styles.lineDone]} /> : null}
                 </View>
                 <View style={styles.stepCopy}>
                   <Text style={[styles.stepTitle, (done || current) && styles.stepTitleActive]}>
@@ -131,6 +158,33 @@ export default function OrderTrackingScreen() {
           <View style={styles.etaThumb}><Text style={styles.etaValue}>{etaLabel(order.eta)}</Text></View>
           <Text style={styles.etaLabel}>Estimated ready time</Text>
         </View>
+
+        {order.status === 'READY_FOR_PICKUP' ? (
+          <View style={styles.pickupCard}>
+            <Text style={styles.pickupTitle}>Collect your print</Text>
+            <Text style={styles.pickupCopy}>
+              Confirm pickup once you have the model. The provider will then close the order.
+            </Text>
+            {pickupError ? <Text accessibilityRole="alert" style={styles.pollError}>{pickupError}</Text> : null}
+            <Button
+              title="I picked it up"
+              loading={pickupBusy}
+              onPress={() => void confirmPickup()}
+            />
+          </View>
+        ) : null}
+        {order.status === 'PICKED_UP' ? (
+          <View style={styles.pickupCard}>
+            <Text style={styles.pickupTitle}>Pickup confirmed</Text>
+            <Text style={styles.pickupCopy}>Waiting for the provider to complete the order.</Text>
+          </View>
+        ) : null}
+        {order.status === 'COMPLETED' ? (
+          <View style={styles.pickupCard}>
+            <Text style={styles.pickupTitle}>Order completed</Text>
+            <Text style={styles.pickupCopy}>Thanks for printing with Forge.</Text>
+          </View>
+        ) : null}
 
         <View style={styles.actions}>
           <Pressable accessibilityRole="button" onPress={openDirections} style={styles.action}>
@@ -179,6 +233,9 @@ const styles = StyleSheet.create({
   etaThumb: { minWidth: 70, height: 62, paddingHorizontal: 8, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
   etaValue: { fontFamily: fonts.bold, fontSize: 16, color: colors.text, textAlign: 'center' },
   etaLabel: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  pickupCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: 14, gap: 8 },
+  pickupTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  pickupCopy: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
   actions: { flexDirection: 'row', gap: 12 },
   action: { flex: 1, minHeight: 66, borderRadius: radius.md, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center', gap: 5, padding: 8 },
   actionLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text, textAlign: 'center' },

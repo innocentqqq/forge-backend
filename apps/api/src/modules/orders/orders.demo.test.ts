@@ -51,6 +51,13 @@ describe('projectDemoOrder', () => {
     expect(projectDemoOrder(declined, start + 30_000)).toEqual(declined);
   });
 
+  it('does not rewind an order after pickup or completion', () => {
+    const pickedUp = demoOrder({ status: 'PICKED_UP', progress: 100 });
+    const completed = demoOrder({ status: 'COMPLETED', progress: 100 });
+    expect(projectDemoOrder(pickedUp, start + 30_000)).toEqual(pickedUp);
+    expect(projectDemoOrder(completed, start + 30_000)).toEqual(completed);
+  });
+
   it('leaves manually controlled orders unchanged', () => {
     const manual = demoOrder({ demo_started_at: null, status: 'PRINTING', progress: 42 });
     expect(projectDemoOrder(manual, start + 30_000)).toEqual(manual);

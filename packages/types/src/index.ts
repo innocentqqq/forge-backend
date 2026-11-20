@@ -33,6 +33,8 @@ export type OrderStatus =
   | 'IN_QUEUE'
   | 'PRINTING'
   | 'READY_FOR_PICKUP'
+  | 'PICKED_UP'
+  | 'COMPLETED'
   | 'PENDING_ACCEPTANCE'
   | 'DECLINED'
   | 'CANCELLED';

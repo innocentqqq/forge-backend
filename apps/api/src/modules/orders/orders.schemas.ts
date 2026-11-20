@@ -9,6 +9,8 @@ const status = z.enum([
   'IN_QUEUE',
   'PRINTING',
   'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'COMPLETED',
   'DECLINED',
   'CANCELLED',
 ]);
