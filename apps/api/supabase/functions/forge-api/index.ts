@@ -168,7 +168,14 @@ const QUALITY_FACTORS: Record<string, number> = {
 const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const MATERIALS = ['PLA', 'ABS', 'PETG', 'TPU'];
 const QUALITIES = ['DRAFT', 'STANDARD', 'HIGH'];
-const CONFIRMED_OR_LATER = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
+const CONFIRMED_OR_LATER = [
+  'CONFIRMED',
+  'IN_QUEUE',
+  'PRINTING',
+  'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'COMPLETED',
+];
 const MODEL_BUCKET = 'models';
 const MAX_MODEL_BYTES = 50 * 1024 * 1024;
 const DEMO_DURATION_MS = 60_000;
@@ -178,16 +185,30 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CONFIRMED: ['IN_QUEUE', 'CANCELLED'],
   IN_QUEUE: ['PRINTING', 'CANCELLED'],
   PRINTING: ['READY_FOR_PICKUP', 'CANCELLED'],
-  READY_FOR_PICKUP: [],
+  READY_FOR_PICKUP: ['PICKED_UP'],
+  PICKED_UP: ['COMPLETED'],
+  COMPLETED: [],
   DECLINED: [],
   CANCELLED: [],
 };
+const CUSTOMER_STATUS_UPDATES = ['PICKED_UP', 'CANCELLED'];
+const PROVIDER_STATUS_UPDATES = [
+  'CONFIRMED',
+  'IN_QUEUE',
+  'PRINTING',
+  'READY_FOR_PICKUP',
+  'COMPLETED',
+  'DECLINED',
+  'CANCELLED',
+];
 const PROGRESS_BY_STATUS: Record<string, number> = {
   PENDING_ACCEPTANCE: 0,
   CONFIRMED: 10,
   IN_QUEUE: 30,
   PRINTING: 75,
   READY_FOR_PICKUP: 100,
+  PICKED_UP: 100,
+  COMPLETED: 100,
   DECLINED: 0,
 };
 
@@ -647,11 +668,30 @@ function assertTransition(from: string, to: string): void {
   }
 }
 
+function assertStatusForRole(isCustomer: boolean, status: string): void {
+  const allowed = isCustomer ? CUSTOMER_STATUS_UPDATES : PROVIDER_STATUS_UPDATES;
+  if (!allowed.includes(status)) {
+    fail(
+      403,
+      'FORBIDDEN',
+      isCustomer ? 'Only the provider can set this status' : 'Only the customer can confirm pickup',
+    );
+  }
+}
+
 /** Keep customer and provider screens in sync without a timer inside the function. */
 function projectDemoOrder(row: JsonObject): JsonObject {
   if (!row.demo_started_at) return row;
   const status = String(row.status ?? '');
-  if (status === 'DECLINED' || status === 'CANCELLED') return row;
+  if (
+    status === 'DECLINED' ||
+    status === 'CANCELLED' ||
+    status === 'READY_FOR_PICKUP' ||
+    status === 'PICKED_UP' ||
+    status === 'COMPLETED'
+  ) {
+    return row;
+  }
   const startedAt = Date.parse(String(row.demo_started_at));
   if (!Number.isFinite(startedAt)) return row;
 
@@ -815,14 +855,16 @@ async function changeOrderStatus(
   const current = await loadOrder(orderId);
   const isCustomer = current.user_id === user.id;
   if (isCustomer) {
-    if (nextStatus !== 'CANCELLED') {
-      fail(403, 'FORBIDDEN', 'Only the provider can change this status');
-    }
+    assertStatusForRole(true, nextStatus);
   } else {
     await assertProviderOwnsOrder(current, user.id);
+    assertStatusForRole(false, nextStatus);
   }
   if (current.status === nextStatus) return formatOrderForClient(current);
-  assertTransition(String(current.status), nextStatus);
+  // The customer acts on the projected demo status, which may be ahead of the
+  // stored status. Validate against what they can see, then snapshot it.
+  const visibleStatus = String(projectDemoOrder(current).status ?? current.status);
+  assertTransition(visibleStatus, nextStatus);
 
   const { error } = await db
     .from('orders')
@@ -1340,6 +1382,7 @@ async function route(request: Request): Promise<Response> {
       // The provider sees the projected demo status, not the stored one. Validate
       // against what they can see so a manual update can take over a running demo.
       if (body.status !== undefined) {
+        assertStatusForRole(false, nextStatus);
         const visibleStatus = String(projectDemoOrder(current).status ?? current.status);
         assertTransition(visibleStatus, nextStatus);
       }
@@ -1467,7 +1510,7 @@ async function route(request: Request): Promise<Response> {
           .from('orders')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id)
-          .eq('status', 'READY_FOR_PICKUP'),
+          .in('status', ['COMPLETED']),
       ]);
       if (saved.error || total.error || completed.error)
         fail(500, 'PROFILE_STATS_FAILED', 'Could not load profile statistics');

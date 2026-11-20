@@ -8,20 +8,37 @@ export const ORDER_STATUSES: readonly OrderStatus[] = [
   'IN_QUEUE',
   'PRINTING',
   'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'COMPLETED',
   'DECLINED',
   'CANCELLED',
 ];
 
-/** The only status changes the API will accept. */
+/** The only status changes the API will accept. Role checks are applied separately. */
 export const STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   PENDING_ACCEPTANCE: ['CONFIRMED', 'DECLINED', 'CANCELLED'],
   CONFIRMED: ['IN_QUEUE', 'CANCELLED'],
   IN_QUEUE: ['PRINTING', 'CANCELLED'],
   PRINTING: ['READY_FOR_PICKUP', 'CANCELLED'],
-  READY_FOR_PICKUP: [],
+  READY_FOR_PICKUP: ['PICKED_UP'],
+  PICKED_UP: ['COMPLETED'],
+  COMPLETED: [],
   DECLINED: [],
   CANCELLED: [],
 };
+
+/** The customer only confirms pickup and cancels; the provider owns the other steps. */
+export const CUSTOMER_STATUS_UPDATES: readonly OrderStatus[] = ['PICKED_UP', 'CANCELLED'];
+
+export const PROVIDER_STATUS_UPDATES: readonly OrderStatus[] = [
+  'CONFIRMED',
+  'IN_QUEUE',
+  'PRINTING',
+  'READY_FOR_PICKUP',
+  'COMPLETED',
+  'DECLINED',
+  'CANCELLED',
+];
 
 export const ACCEPTANCE_PENDING: readonly OrderStatus[] = [
   'PENDING_ACCEPTANCE',

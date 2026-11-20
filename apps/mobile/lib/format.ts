@@ -5,6 +5,8 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   IN_QUEUE: 'In queue',
   PRINTING: 'Printing',
   READY_FOR_PICKUP: 'Ready for pickup',
+  PICKED_UP: 'Picked up',
+  COMPLETED: 'Completed',
   PENDING_ACCEPTANCE: 'Pending acceptance',
   DECLINED: 'Declined',
   CANCELLED: 'Cancelled',
@@ -15,6 +17,8 @@ export type StatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 export function statusTone(status: OrderStatus): StatusTone {
   switch (status) {
     case 'READY_FOR_PICKUP':
+    case 'PICKED_UP':
+    case 'COMPLETED':
       return 'success';
     case 'PRINTING':
       return 'info';

@@ -4,6 +4,8 @@ import { estimatePrice, MATERIAL_RATES } from '../pricing/pricing.service';
 import { projectDemoOrder } from './orders.demo';
 import type { CreateOrderInput, ProgressInput, StatusInput } from './orders.schemas';
 import {
+  CUSTOMER_STATUS_UPDATES,
+  PROVIDER_STATUS_UPDATES,
   STATUS_TRANSITIONS,
   type Material,
   type OrderRow,
@@ -19,6 +21,8 @@ const CONFIRMED_OR_LATER: readonly OrderStatus[] = [
   'IN_QUEUE',
   'PRINTING',
   'READY_FOR_PICKUP',
+  'PICKED_UP',
+  'COMPLETED',
 ];
 
 interface PrinterMaterialRate {
@@ -78,6 +82,18 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
       409,
       'INVALID_STATUS_TRANSITION',
       `Cannot change order status from ${from} to ${to}`,
+    );
+  }
+}
+
+/** Pickup is confirmed by the customer; every other handoff is provider-controlled. */
+export function assertStatusForRole(isCustomer: boolean, status: OrderStatus): void {
+  const allowed = isCustomer ? CUSTOMER_STATUS_UPDATES : PROVIDER_STATUS_UPDATES;
+  if (!allowed.includes(status)) {
+    throw new AppError(
+      403,
+      'FORBIDDEN',
+      isCustomer ? 'Only the provider can set this status' : 'Only the customer can confirm pickup',
     );
   }
 }
@@ -420,6 +436,7 @@ export async function updateProgress(
 
   const nextStatus = (input.status as OrderStatus | undefined) ?? current.status;
   if (input.status !== undefined) {
+    assertStatusForRole(false, nextStatus);
     // Providers see the projected demo status, so validate against that view
     // when they take over a running demo with a manual update.
     const visibleStatus = projectDemoOrder(current).status;
@@ -451,16 +468,18 @@ export async function updateStatus(
 ): Promise<OrderWithRelations> {
   const current = await loadOrder(orderId);
   const nextStatus = input.status as OrderStatus;
+  const isCustomer = current.user_id === userId;
 
-  if (current.user_id === userId) {
-    if (nextStatus !== 'CANCELLED') {
-      throw new AppError(403, 'FORBIDDEN', 'Only the provider can advance this order');
-    }
-  } else {
+  if (isCustomer) assertStatusForRole(true, nextStatus);
+  else {
     await assertProviderOwnsOrder(current, userId);
+    assertStatusForRole(false, nextStatus);
   }
 
-  assertTransition(current.status, nextStatus);
+  // Both roles act on what they can see. During a demo the stored status can
+  // lag behind the projected status the customer sees on the tracking screen.
+  const visibleStatus = projectDemoOrder(current).status;
+  assertTransition(visibleStatus, nextStatus);
 
   const progressByStatus: Record<OrderStatus, number> = {
     PENDING_ACCEPTANCE: 0,
@@ -468,6 +487,8 @@ export async function updateStatus(
     IN_QUEUE: 30,
     PRINTING: 75,
     READY_FOR_PICKUP: 100,
+    PICKED_UP: 100,
+    COMPLETED: 100,
     DECLINED: 0,
     CANCELLED: current.progress,
   };

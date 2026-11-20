@@ -365,8 +365,11 @@ point. The customer UI should say the exact address is shared after acceptance.
 ## Orders (Agent 2)
 
 All order routes require authentication. Statuses:
-`PENDING_ACCEPTANCE → CONFIRMED → IN_QUEUE → PRINTING → READY_FOR_PICKUP`,
+`PENDING_ACCEPTANCE → CONFIRMED → IN_QUEUE → PRINTING → READY_FOR_PICKUP → PICKED_UP → COMPLETED`,
 plus `DECLINED` and `CANCELLED`. Invalid transitions return `409 INVALID_STATUS_TRANSITION`.
+The customer confirms `PICKED_UP`; the provider sets every other status. `PATCH /orders/:id/status`
+and `PATCH /orders/:id/progress` return `403 FORBIDDEN` if the caller tries the other role's step
+(for example, a provider cannot set `PICKED_UP` and a customer cannot set `COMPLETED`).
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -376,7 +379,7 @@ plus `DECLINED` and `CANCELLED`. Invalid transitions return `409 INVALID_STATUS_
 | `GET` | `/orders/:id` | Get one order (customer or owning provider) |
 | `POST` | `/orders/:id/accept` | Provider accepts a pending order |
 | `POST` | `/orders/:id/decline` | Provider declines a pending order |
-| `PATCH` | `/orders/:id/status` | Provider advances status; customer may cancel |
+| `PATCH` | `/orders/:id/status` | Provider advances status; customer may cancel or confirm pickup |
 | `PATCH` | `/orders/:id/progress` | Provider sets `progress` 0–100, optionally `status` |
 | `POST` | `/orders/:id/demo/start` | Dev helper: accept if needed and start a 60-second print demo |
 
@@ -389,6 +392,7 @@ orders hide it (labs continue to show their public pickup address).
 
 For the demo endpoint, `GET /orders/:id` derives `progress` and `status` from
 `demo_started_at` so both customer and provider screens advance without a background timer.
-A manual progress/status update cancels the demo projection. When a status is supplied,
-it is validated against the projected status the provider can see, so a manual action can
-take over a running demo without being rejected for a stale stored status.
+Projection stops at `READY_FOR_PICKUP`; the customer then confirms pickup and the provider
+closes the order. A manual progress/status update cancels the demo projection. Status changes are
+validated against the projected status the caller can see, so the customer can confirm a printed
+model and the provider can take over a running demo without a stale-status rejection.

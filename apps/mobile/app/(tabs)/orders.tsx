@@ -26,7 +26,7 @@ export default function OrdersScreen() {
     return <Screen><AppHeader /><ErrorView message={error} onRetry={() => void reload()} /></Screen>;
   }
 
-  const active = orders.filter((order) => !['READY_FOR_PICKUP', 'DECLINED', 'CANCELLED'].includes(order.status));
+  const active = orders.filter((order) => !['PICKED_UP', 'COMPLETED', 'DECLINED', 'CANCELLED'].includes(order.status));
   const past = orders.filter((order) => !active.includes(order));
 
   return (

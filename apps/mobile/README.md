@@ -121,8 +121,10 @@ In mock mode all of this is in memory; restart the app to reset it.
 4. Choose a provider and place the order. Mock mode skips provider acceptance entirely:
    the order starts printing immediately and the app opens the tracking screen.
 5. The tracking screen shows the status timeline and the same model building up
-   bottom-to-top in 3D over 60 seconds. It polls every second while focused and stops
-   when the order is ready.
+   bottom-to-top in 3D over 60 seconds. It polls every second while focused. When the print is
+   ready, tap **I picked it up**; if you also completed provider onboarding, switch to provider
+   mode and tap **Complete order** to see the final `Completed` state. Mock mode shares the same
+   in-memory order across both modes on one device.
 6. Optional: complete provider onboarding, then open **Profile → Open provider dashboard** and
    the incoming order to see the same progress from the provider side. The **Start 60-second
    demo print** button is still available there, but it is not needed for the mock customer flow.
@@ -145,9 +147,13 @@ order from its own provider profile.
 4. Customer phone: open the tracker from confirmation or **Orders → the new order**. It polls
    every 3 seconds while focused; the 3D model builds from bottom to top as the API projects
    progress from `demo_started_at`. The provider's detail screen updates from the same source.
+5. When the tracker reaches **Ready for pickup**, the customer taps **I picked it up**. The
+   provider screen changes to **Complete order**; tap it to close the order. The customer's
+   tracker then shows **Completed**. Polling only stops on `Completed`, `Declined`, or `Cancelled`.
 
 A manual progress/status update cancels the demo projection and hands control back to the
-provider's slider/status buttons.
+provider's slider/status buttons. The final handoff is role-protected: only the customer can set
+`PICKED_UP`, and only the provider can set `COMPLETED`.
 
 ## Feature limitations
 

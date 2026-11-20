@@ -22,6 +22,7 @@ import type {
   ProviderSearchInput,
 } from "./marketplace-types";
 import { inspectMockModel } from "./mock-model";
+import { progressForStatus } from "./order-status";
 import {
   emptyHours,
   legacyPrinterFromProvider,
@@ -459,7 +460,9 @@ const ORDER_TRANSITIONS: Record<Order["status"], Order["status"][]> = {
   CONFIRMED: ["IN_QUEUE", "CANCELLED"],
   IN_QUEUE: ["PRINTING", "CANCELLED"],
   PRINTING: ["READY_FOR_PICKUP", "CANCELLED"],
-  READY_FOR_PICKUP: [],
+  READY_FOR_PICKUP: ["PICKED_UP"],
+  PICKED_UP: ["COMPLETED"],
+  COMPLETED: [],
   DECLINED: [],
   CANCELLED: [],
 };
@@ -853,6 +856,13 @@ export const api = {
           400,
         );
       }
+      if (status === "PICKED_UP") {
+        throw new ApiError(
+          "FORBIDDEN",
+          "Only the customer can confirm pickup.",
+          403,
+        );
+      }
       if (
         status &&
         status !== order.status &&
@@ -883,6 +893,50 @@ export const api = {
       {
         method: "PATCH",
         body: { progress, ...(status ? { status } : {}) },
+      },
+    );
+    return result.order;
+  },
+
+  /** Customer confirmation of pickup. The provider closes the order separately. */
+  async updateMarketplaceStatus(
+    id: string,
+    status: MarketplaceOrder["status"],
+    notes?: string,
+  ) {
+    if (USE_MOCK_API) {
+      const order = mockOrders.get(id);
+      if (!order)
+        throw new ApiError("ORDER_NOT_FOUND", "Order not found.", 404);
+      if (
+        status !== order.status &&
+        !ORDER_TRANSITIONS[order.status].includes(status)
+      ) {
+        throw new ApiError(
+          "INVALID_STATUS_TRANSITION",
+          `Cannot change ${order.status} to ${status}.`,
+          400,
+        );
+      }
+      const timer = demoTimers.get(id);
+      if (timer) {
+        clearInterval(timer);
+        demoTimers.delete(id);
+      }
+      const updated = {
+        ...order,
+        status,
+        progress: progressForStatus(status, order.progress),
+        updated_at: new Date().toISOString(),
+      };
+      mockOrders.set(id, updated);
+      return updated;
+    }
+    const result = await request<{ order: MarketplaceOrder }>(
+      `/orders/${encodeURIComponent(id)}/status`,
+      {
+        method: "PATCH",
+        body: { status, ...(notes ? { notes } : {}) },
       },
     );
     return result.order;
@@ -949,7 +1003,7 @@ export const api = {
       const orders = [...mockOrders.values()];
       return Promise.resolve<ProfileStats>({
         printsCompleted: orders.filter(
-          (order) => order.status === "READY_FOR_PICKUP",
+          (order) => order.status === "COMPLETED",
         ).length,
         totalOrders: orders.length,
         savedProviders: 0,

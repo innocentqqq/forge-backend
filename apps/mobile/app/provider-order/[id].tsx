@@ -18,46 +18,16 @@ import {
   Screen,
 } from "../../components/ui";
 import { api } from "../../lib/api";
-import { formatMoney } from "../../lib/format";
+import { formatMoney, STATUS_LABELS } from "../../lib/format";
 import { useMarketplaceOrder } from "../../lib/marketplace-hooks";
 import { fonts } from "../../lib/fonts";
+import {
+  nextProviderAction,
+  ORDER_STAGES,
+  progressForStatus,
+} from "../../lib/order-status";
 import { colors, radius } from "../../lib/theme";
 import type { OrderStatus } from "../../lib/types";
-
-const STEPS = ["Confirmed", "In queue", "Printing", "Ready for pickup"];
-
-function stageIndex(status: OrderStatus) {
-  switch (status) {
-    case "CONFIRMED":
-    case "PENDING_ACCEPTANCE":
-      return 0;
-    case "IN_QUEUE":
-      return 1;
-    case "PRINTING":
-      return 2;
-    case "READY_FOR_PICKUP":
-      return 3;
-    default:
-      return -1;
-  }
-}
-
-function nextAction(
-  status: OrderStatus,
-): { label: string; next: OrderStatus } | null {
-  switch (status) {
-    case "PENDING_ACCEPTANCE":
-      return { label: "Confirm order", next: "CONFIRMED" };
-    case "CONFIRMED":
-      return { label: "Add to queue", next: "IN_QUEUE" };
-    case "IN_QUEUE":
-      return { label: "Start printing", next: "PRINTING" };
-    case "PRINTING":
-      return { label: "Mark ready for pickup", next: "READY_FOR_PICKUP" };
-    default:
-      return null;
-  }
-}
 
 export default function ProviderOrderScreen() {
   const params = useLocalSearchParams<{
@@ -119,23 +89,20 @@ export default function ProviderOrderScreen() {
 
   const status = liveOrder?.status ?? manualStatus;
   const progress = liveOrder?.progress ?? manualProgress;
-  const current = stageIndex(status);
-  const action = nextAction(status);
+  const current = ORDER_STAGES.indexOf(status);
+  const action = nextProviderAction(status);
+  const demoAvailable = ["CONFIRMED", "IN_QUEUE", "PRINTING"].includes(status);
   const visibleError = error || loadError;
 
   const advance = async () => {
-    if (!params.id || !action) return;
+    if (!params.id || !action?.next) return;
+    const nextStatus = action.next;
     setBusy(true);
     setError("");
     try {
-      const nextProgress =
-        action.next === "READY_FOR_PICKUP"
-          ? 100
-          : action.next === "PRINTING"
-            ? Math.max(progress, 10)
-            : progress;
-      await api.updateMarketplaceProgress(params.id, nextProgress, action.next);
-      setManualStatus(action.next);
+      const nextProgress = progressForStatus(nextStatus, progress);
+      await api.updateMarketplaceProgress(params.id, nextProgress, nextStatus);
+      setManualStatus(nextStatus);
       setManualProgress(nextProgress);
       router.back();
     } catch (err) {
@@ -235,11 +202,15 @@ export default function ProviderOrderScreen() {
         <View style={styles.demoCard}>
           <Text style={styles.demoTitle}>Automated print demo</Text>
           <Text style={styles.demoCopy}>
-            {demoStarted || status === "READY_FOR_PICKUP"
-              ? `Print running at ${progress}%. The customer tracking screen updates as it builds.`
-              : "Accepts the order and reveals the model from 0% to 100% over 60 seconds."}
+            {status === "PICKED_UP"
+              ? "The customer confirmed pickup. Complete the order to finish the handoff."
+              : status === "COMPLETED"
+                ? "This order is complete."
+                : demoStarted
+                  ? `Print running at ${progress}%. The customer tracking screen updates as it builds.`
+                  : "Accepts the order and reveals the model from 0% to 100% over 60 seconds."}
           </Text>
-          {status !== "READY_FOR_PICKUP" ? (
+          {demoAvailable ? (
             <Button
               title={
                 demoStarted ? "Demo running…" : "Start 60-second demo print"
@@ -262,11 +233,12 @@ export default function ProviderOrderScreen() {
         </View>
 
         <View style={styles.timeline}>
-          {STEPS.map((label, index) => {
+          {ORDER_STAGES.map((stage, index) => {
+            const label = STATUS_LABELS[stage];
             const done = current > index;
             const active = current === index;
             return (
-              <View key={label} style={styles.step}>
+              <View key={stage} style={styles.step}>
                 <View style={styles.rail}>
                   <View
                     style={[
@@ -287,7 +259,7 @@ export default function ProviderOrderScreen() {
                       {index + 1}
                     </Text>
                   </View>
-                  {index < STEPS.length - 1 ? (
+                  {index < ORDER_STAGES.length - 1 ? (
                     <View style={styles.connector} />
                   ) : null}
                 </View>
@@ -313,13 +285,22 @@ export default function ProviderOrderScreen() {
           })}
         </View>
 
+        {status === "PICKED_UP" ? (
+          <Banner
+            tone="success"
+            message="Customer confirmed pickup. Complete the order when the handoff is finished."
+          />
+        ) : null}
         {visibleError ? <Banner message={visibleError} /> : null}
 
         <Button
-          title={action ? action.label : "Order completed"}
+          title={
+            action?.label ??
+            (status === "COMPLETED" ? "Order completed" : "No action available")
+          }
           onPress={() => void advance()}
           loading={busy}
-          disabled={!action}
+          disabled={!action?.next}
         />
 
         <Pressable

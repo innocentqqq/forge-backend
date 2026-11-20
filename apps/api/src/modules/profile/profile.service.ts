@@ -132,7 +132,7 @@ export async function getProfileStats(userId: string): Promise<ProfileStats> {
       .from('orders')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('status', 'READY_FOR_PICKUP'),
+      .in('status', ['COMPLETED']),
   ]);
 
   if (savedProvidersResult.error && !isMissingRelationError(savedProvidersResult.error)) {
