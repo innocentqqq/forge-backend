@@ -51,6 +51,8 @@ function RootNavigator() {
       <Stack.Screen name="provider" options={{ headerShown: false }} />
       <Stack.Screen name="printer/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="provider-onboarding" options={{ headerShown: false }} />
+      <Stack.Screen name="security" options={{ headerShown: false }} />
+      <Stack.Screen name="messages/[orderId]" options={{ headerShown: false }} />
       <Stack.Screen
         name="provider-order/[id]"
         options={{ headerShown: false, gestureEnabled: false }}

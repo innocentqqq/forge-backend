@@ -1,4 +1,4 @@
-import type { Material, OrderStatus, Quality } from '@forge/types';
+import type { Material, OrderCustomerContact, OrderStatus, Quality } from '@forge/types';
 
 export type { Material, OrderStatus, Quality } from '@forge/types';
 
@@ -88,16 +88,27 @@ export interface ProviderForOrder {
   pickup_area: string;
   pickup_address: string;
   exact_address?: string | null;
+  contact_phone?: string | null;
+}
+
+export interface OrderMessageRow {
+  id: string;
+  order_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
 }
 
 export interface OrderWithRelations extends OrderRow {
   modelId: string;
+  customer?: OrderCustomerContact;
   provider?: {
     id: string;
     type: 'LAB' | 'INDIVIDUAL';
     displayName: string;
     pickupArea: string;
     pickupAddress: string | null;
+    phone: string | null;
   };
   order_status_events?: Array<{
     id: string;

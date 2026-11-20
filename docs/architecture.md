@@ -88,7 +88,9 @@ confirmation instead of running the sign-in check.
 `app/_layout.tsx` redirects unauthenticated users to `/sign-in`. `/auth/callback`,
 `/auth/reset-password`, and `/auth/success` are public because the session is not
 available until the callback finishes. The app pauses redirects with `holdRedirect` while
-a social flow is in flight.
+a social flow is in flight. `/security` and `/messages/:orderId` are protected screens inside the
+signed-in route tree, so profile settings and order conversations never redirect an authenticated
+user back home.
 
 ## Data model
 
@@ -100,6 +102,7 @@ Migrations live in `apps/api/supabase/migrations/`.
 | `printers` | Physical printers offered by providers |
 | `orders` | Print orders, price snapshot, status, progress, ETA |
 | `order_status_events` | Timeline entries for an order |
+| `order_messages` | Customer/provider messages scoped to one order |
 | `providers` | Provider profiles (lab or individual) and pickup/availability settings |
 | `saved_providers` | User's saved providers |
 | `model_files` | Uploaded 3D models (order creation needs a model id) |

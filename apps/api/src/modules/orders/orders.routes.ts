@@ -16,6 +16,8 @@ router.post('/:id/decline', asyncHandler(controller.declineOrderHandler));
 router.post('/:id/demo/start', asyncHandler(controller.startDemoPrintHandler));
 router.patch('/:id/progress', asyncHandler(controller.updateProgressHandler));
 router.patch('/:id/status', asyncHandler(controller.updateStatusHandler));
+router.get('/:id/messages', asyncHandler(controller.listMessagesHandler));
+router.post('/:id/messages', asyncHandler(controller.createMessageHandler));
 router.get('/:id', asyncHandler(controller.getOrderHandler));
 
 export default router;

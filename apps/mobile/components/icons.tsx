@@ -37,6 +37,7 @@ export const icons = {
   minus: 'remove',
   pin: 'location-outline',
   phone: 'call-outline',
+  chat: 'chatbubble-outline',
   card: 'card-outline',
   google: 'logo-google',
 } as const satisfies Record<string, IconName>;

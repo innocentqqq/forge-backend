@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -303,16 +302,23 @@ export default function ProviderOrderScreen() {
           disabled={!action?.next}
         />
 
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Customer contact</Text>
+          <Text style={styles.subtitle}>
+            {liveOrder?.customer?.fullName ?? "Customer"}
+          </Text>
+          <Text style={styles.progressValue}>
+            {liveOrder?.customer?.phone ?? "No phone number added yet"}
+          </Text>
+        </View>
+
         <Pressable
           onPress={() =>
-            Alert.alert(
-              "Message customer",
-              "Customer messaging is coming soon.",
-            )
+            router.push(`/messages/${params.id}?role=provider`)
           }
           hitSlop={8}
         >
-          <Text style={styles.link}>Message customer</Text>
+          <Text style={styles.link}>Contact &amp; messages</Text>
         </Pressable>
         <Text style={styles.footnote}>
           Status changes are shared with the customer in real time.

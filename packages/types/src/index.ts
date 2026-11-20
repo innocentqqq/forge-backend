@@ -124,6 +124,34 @@ export interface OrderStatusEvent {
   created_at: string;
 }
 
+/** Limited contact details shared only with the other party to an order. */
+export interface OrderCustomerContact {
+  id: string;
+  fullName: string | null;
+  phone: string | null;
+}
+
+export interface OrderProviderContact {
+  id: string;
+  type: ProviderType;
+  displayName: string;
+  pickupArea: string;
+  pickupAddress: string | null;
+  phone: string | null;
+}
+
+export type OrderMessageRole = 'CUSTOMER' | 'PROVIDER';
+
+/** A message in the per-order thread between the customer and the provider. */
+export interface OrderMessage {
+  id: string;
+  orderId: string;
+  senderId: string;
+  senderRole: OrderMessageRole;
+  body: string;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
   order_number: string;
@@ -144,6 +172,8 @@ export interface Order {
   created_at: string;
   updated_at: string;
   printers?: Printer;
+  customer?: OrderCustomerContact;
+  provider?: OrderProviderContact;
   order_status_events?: OrderStatusEvent[];
 }
 

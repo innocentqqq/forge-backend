@@ -146,7 +146,7 @@ export default function ProfileScreen() {
               icon: icons.shield,
               title: "Security",
               detail: "Password and account protection",
-              to: "/forgot-password",
+              to: "/security",
             },
           ]}
         />

@@ -8,7 +8,8 @@ Expo (React Native + TypeScript + Expo Router) client for the `forge-backend` AP
 - Model upload and configuration: STL, OBJ, and 3MF uploads, dimensions, volume, material, color, quality, quantity, and live estimate.
 - Provider search: nearest / cheapest / fastest sorting, material filtering, fit status, and order placement.
 - **Orders** tab: active and past order lists; order tracking polls while focused and shows build progress. The 3D preview supports drag-to-orbit, two-finger pan/zoom, and reset view while the print builds.
-- **Profile** tab: name/phone, print preferences, stats, sign out.
+- **Profile** tab: editable name/phone, print preferences, stats, Security screen (password, recovery email, verification, sign-out), and sign out.
+- Per-order contact cards with phone dialing and a customer↔provider message thread on both order screens.
 - **Provider** tab: full provider setup wizard (type, public/private location, printers, per-material rates, pickup hours, agreements), activation gate, open/closed toggle, queue settings, and incoming orders.
 - Public provider cards: verified badge, description, photo URL, individual-maker privacy note, and “model doesn’t fit” state.
 
@@ -137,8 +138,9 @@ on both phones after changing the flag. Use two separate Supabase accounts; an a
 order from its own provider profile.
 
 1. Provider phone: sign in, open **Profile → Become a provider**, complete the six steps
-   (pickup area, FDM printer, PLA/ABS/PETG/TPU rates, hours, agreements), and activate.
-2. Customer phone: sign in with the other account, upload an STL or OBJ file, confirm the
+   (pickup area, FDM printer, PLA/ABS/PETG/TPU rates, hours, agreements), add a contact phone, and activate.
+2. Customer phone: sign in with the other account, open **Profile → Personal details**, save a
+    contact phone, then upload an STL or OBJ file, confirm the
    dimensions/volume/estimate, choose the provider, and place the order. An individual provider
    creates a pending request; a lab order is confirmed immediately.
 3. Provider phone: open **Provider → Jobs**, then open the new order. Accept it if it is
@@ -150,6 +152,10 @@ order from its own provider profile.
 5. When the tracker reaches **Ready for pickup**, the customer taps **I picked it up**. The
    provider screen changes to **Complete order**; tap it to close the order. The customer's
    tracker then shows **Completed**. Polling only stops on `Completed`, `Declined`, or `Cancelled`.
+6. On either order screen, open **Contact & messages** to see the other party's saved phone
+   number and send a message. The thread polls every five seconds while focused; use the **Call**
+   button to hand off to the device dialer. Open **Profile → Security** to change a password,
+   resend a reset or verification email, review the active session, or sign out.
 
 A manual progress/status update cancels the demo projection and hands control back to the
 provider's slider/status buttons. The final handoff is role-protected: only the customer can set
