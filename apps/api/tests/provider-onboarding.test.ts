@@ -20,6 +20,7 @@ import {
   activateProvider,
   deleteMyPrinter,
   updateMyHours,
+  updateMyProvider,
 } from '../src/modules/providers/providers.service';
 import { haversineKm, searchProviders } from '../src/modules/providers/providers.search';
 import type { PrinterRow, ProviderRow } from '../src/modules/providers/providers.types';
@@ -293,6 +294,47 @@ describe('provider setup and ownership', () => {
     expect(profile.status).toBe('active');
     expect(profile.setup.canAppearInSearch).toBe(true);
     expect(profile.rates.PLA?.ratePerCm3).toBe(0.06);
+  });
+
+  it('saves printers and global rates supplied on a profile update', async () => {
+    setQueries({
+      providers: { data: providerRow(), error: null },
+      provider_private: { data: null, error: null },
+      printers: { data: [printerRow()], error: null },
+      orders: { data: [], error: null },
+      provider_agreements: {
+        data: {
+          provider_id: 'provider-1',
+          liability: true,
+          payment_terms: true,
+          prohibited_items: true,
+          safe_pickup: true,
+        },
+        error: null,
+      },
+      printer_materials: { data: [], error: null },
+    });
+    fromMock('printers').single.mockResolvedValue({ data: printerRow(), error: null });
+
+    const profile = await updateMyProvider(
+      'user-1',
+      updateProviderSchema.parse({
+        printers: [
+          {
+            name: 'Lab printer 1',
+            modelName: 'Prusa MK4',
+            buildVolume: { x: 220, y: 220, z: 250 },
+            materials: ['PLA'],
+            isActive: true,
+          },
+        ],
+        rates: { PLA: { ratePerCm3: 0.05, minimumOrder: 0, colors: ['black'] } },
+      }),
+    );
+
+    expect(profile.setup.hasActivePrinter).toBe(true);
+    expect(profile.setup.hasMaterialRate).toBe(true);
+    expect(profile.setup.missing).toEqual([]);
   });
 
   it('merges pickup hours without replacing other days', async () => {

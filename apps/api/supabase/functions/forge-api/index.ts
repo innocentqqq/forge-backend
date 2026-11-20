@@ -501,6 +501,77 @@ async function saveEdgePrinters(
   }
 }
 
+function printersFromBody(body: JsonObject): EdgePrinterInput[] {
+  const printers: EdgePrinterInput[] = [];
+  if (Array.isArray(body.printers)) {
+    for (const raw of body.printers) printers.push(validatePrinter(raw));
+  }
+  if (printers.length === 0 && isObject(body.printer)) {
+    const legacy = body.printer;
+    const materials = validateMaterials(legacy.materials);
+    const price = finiteNumber(legacy.pricePerCm3, 'printer.pricePerCm3', 0.000001, 1000);
+    const minimum = finiteNumber(legacy.minimumOrder, 'printer.minimumOrder', 0, 1000000);
+    const modelName = requireString(legacy.modelName, 'printer.modelName');
+    printers.push({
+      name: modelName,
+      modelName,
+      buildVolume: validateBuildVolume(legacy.buildVolume),
+      materials,
+      bestQuality: 'STANDARD',
+      isActive: true,
+      rates: Object.fromEntries(
+        materials.map((material) => [
+          material,
+          { ratePerCm3: price, minimumOrder: minimum, colors: [] },
+        ]),
+      ),
+    });
+  }
+  return printers;
+}
+
+function mergeGlobalRates(printers: EdgePrinterInput[], rates: Record<string, EdgeRate>): void {
+  for (const printer of printers) {
+    for (const material of printer.materials) {
+      if (!printer.rates[material] && rates[material]) printer.rates[material] = rates[material];
+    }
+  }
+}
+
+async function replaceEdgePrinters(
+  providerId: string,
+  printers: EdgePrinterInput[],
+  point: { lat: number | null; lng: number | null },
+): Promise<void> {
+  const { data: existing, error: fetchError } = await db
+    .from('printers')
+    .select('id')
+    .eq('provider_id', providerId);
+  if (fetchError) fail(500, 'PRINTERS_FETCH_FAILED', 'Could not load your printers');
+  const ids = ((existing as JsonObject[] | null) ?? []).map((row) => String(row.id));
+  if (ids.length > 0) {
+    const { data: activeOrders, error: orderError } = await db
+      .from('orders')
+      .select('id')
+      .in('printer_id', ids)
+      .not('status', 'in', '(DECLINED,CANCELLED)');
+    if (orderError) fail(500, 'ORDER_FETCH_FAILED', 'Could not check printer orders');
+    if (((activeOrders as JsonObject[] | null) ?? []).length > 0) {
+      fail(
+        409,
+        'PRINTER_HAS_ACTIVE_ORDERS',
+        'This printer has active orders and cannot be replaced',
+      );
+    }
+    for (const id of ids) {
+      await db.from('printer_materials').delete().eq('printer_id', id);
+    }
+    const { error: deleteError } = await db.from('printers').delete().eq('provider_id', providerId);
+    if (deleteError) fail(500, 'PRINTER_DELETE_FAILED', 'Could not replace printers');
+  }
+  await saveEdgePrinters(providerId, printers, point);
+}
+
 async function getOrCreateProfile(user: AuthUser) {
   let { data: row, error } = await db.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error) fail(500, 'PROFILE_FETCH_FAILED', 'Could not load profile');
@@ -1606,38 +1677,9 @@ async function route(request: Request): Promise<Response> {
           fail(500, 'PROVIDER_AGREEMENTS_SAVE_FAILED', 'Could not save agreements');
       }
 
-      const printers: EdgePrinterInput[] = [];
-      if (Array.isArray(body.printers)) {
-        for (const raw of body.printers) printers.push(validatePrinter(raw));
-      }
-      if (printers.length === 0 && isObject(body.printer)) {
-        const legacy = body.printer;
-        const materials = validateMaterials(legacy.materials);
-        const price = finiteNumber(legacy.pricePerCm3, 'printer.pricePerCm3', 0.000001, 1000);
-        const minimum = finiteNumber(legacy.minimumOrder, 'printer.minimumOrder', 0, 1000000);
-        const modelName = requireString(legacy.modelName, 'printer.modelName');
-        printers.push({
-          name: modelName,
-          modelName,
-          buildVolume: validateBuildVolume(legacy.buildVolume),
-          materials,
-          bestQuality: 'STANDARD',
-          isActive: true,
-          rates: Object.fromEntries(
-            materials.map((material) => [
-              material,
-              { ratePerCm3: price, minimumOrder: minimum, colors: [] },
-            ]),
-          ),
-        });
-      }
+      const printers = printersFromBody(body);
       const globalRates = body.rates === undefined ? {} : validateRateMap(body.rates);
-      for (const printer of printers) {
-        for (const material of printer.materials) {
-          if (!printer.rates[material] && globalRates[material])
-            printer.rates[material] = globalRates[material];
-        }
-      }
+      mergeGlobalRates(printers, globalRates);
       await saveEdgePrinters(String(providerRow.id), printers, publicPoint);
       return json(await extendedProvider(providerRow), 201);
     };
@@ -1904,14 +1946,22 @@ async function route(request: Request): Promise<Response> {
         if (error) fail(500, 'PROVIDER_AGREEMENTS_SAVE_FAILED', 'Could not save agreements');
       }
 
-      if (body.rates !== undefined) {
-        const rates = validateRateMap(body.rates);
+      const requestedPrinters = printersFromBody(body);
+      const globalRates = body.rates === undefined ? {} : validateRateMap(body.rates);
+      if (requestedPrinters.length > 0) {
+        mergeGlobalRates(requestedPrinters, globalRates);
+        const point = {
+          lat: provider.latitude == null ? null : Number(provider.latitude),
+          lng: provider.longitude == null ? null : Number(provider.longitude),
+        };
+        await replaceEdgePrinters(String(provider.id), requestedPrinters, point);
+      } else if (body.rates !== undefined) {
         const { data: printers } = await db
           .from('printers')
           .select('id, materials')
           .eq('provider_id', provider.id);
         for (const printer of (printers as JsonObject[] | null) ?? []) {
-          for (const [material, rate] of Object.entries(rates)) {
+          for (const [material, rate] of Object.entries(globalRates)) {
             if (((printer.materials as string[] | null) ?? []).includes(material)) {
               await saveEdgeRates(String(printer.id), { [material]: rate });
             }

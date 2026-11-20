@@ -184,6 +184,8 @@ export const updateProviderSchema = z
     maxActiveOrders: z.number().int().positive().max(1000).optional(),
     availability: providerAvailabilitySchema.optional(),
     hours: pickupHoursSchema.optional(),
+    printers: z.array(printerInputSchema).optional(),
+    printer: legacyPrinterSchema.optional(),
     agreements: agreementsSchema.optional(),
     rates: materialRateMapSchema.optional(),
   })

@@ -283,8 +283,12 @@ provided as a pair. Returns `201` with the full profile.
 ### Read and update profile — `GET|PATCH /providers/me` (authenticated)
 
 `PATCH /providers/me` accepts any subset of the extended profile fields, including nested
-`agreements`, `availability`, `hours` and `rates`. `availability.pickupHours` and `hours`
-are merged with existing hours. Returns the full profile.
+`agreements`, `availability`, `hours`, `rates` and the full `printers` array. `printers` is
+treated as the complete desired list and replaces the existing printers; top-level `rates`
+are merged into each printer that supports that material. Replacement returns
+`409 PRINTER_HAS_ACTIVE_ORDERS` if any printer has an order that is not `DECLINED` or
+`CANCELLED`. `availability.pickupHours` and `hours` are merged with existing hours.
+Returns the full profile.
 
 ### Printers — authenticated, provider role only
 
