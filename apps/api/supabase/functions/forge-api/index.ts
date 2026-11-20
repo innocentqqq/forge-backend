@@ -1,4 +1,5 @@
 import { createClient, type User } from 'npm:@supabase/supabase-js@2';
+import { parseModel } from '../../../src/modules/models/parser/index.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceKeysJson = Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}';
@@ -94,16 +95,6 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): num
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function estimatePrice(material: string, quality: string, quantity: number, priceFactor: number) {
-  const rate: Record<string, number> = { PLA: 0.05, ABS: 0.07, PETG: 0.08, TPU: 0.12 };
-  const multiplier: Record<string, number> = { DRAFT: 1, STANDARD: 1.3, HIGH: 1.7 };
-  return (
-    (5 + 20 * (rate[material] ?? rate.PLA) * (multiplier[quality] ?? multiplier.STANDARD)) *
-    priceFactor *
-    Math.max(1, quantity)
-  );
-}
-
 async function providerIdentity(userId: string) {
   const { data, error } = await db
     .from('providers')
@@ -169,10 +160,36 @@ const EDGE_MATERIAL_RATES: Record<string, number> = {
   PETG: 0.08,
   TPU: 0.12,
 };
+const QUALITY_FACTORS: Record<string, number> = {
+  DRAFT: 0.8,
+  STANDARD: 1,
+  HIGH: 1.3,
+};
 const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const MATERIALS = ['PLA', 'ABS', 'PETG', 'TPU'];
 const QUALITIES = ['DRAFT', 'STANDARD', 'HIGH'];
 const CONFIRMED_OR_LATER = ['CONFIRMED', 'IN_QUEUE', 'PRINTING', 'READY_FOR_PICKUP'];
+const MODEL_BUCKET = 'models';
+const MAX_MODEL_BYTES = 50 * 1024 * 1024;
+const DEMO_DURATION_MS = 60_000;
+const ORDER_STATUSES = [...CONFIRMED_OR_LATER, 'PENDING_ACCEPTANCE', 'DECLINED', 'CANCELLED'];
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  PENDING_ACCEPTANCE: ['CONFIRMED', 'DECLINED', 'CANCELLED'],
+  CONFIRMED: ['IN_QUEUE', 'CANCELLED'],
+  IN_QUEUE: ['PRINTING', 'CANCELLED'],
+  PRINTING: ['READY_FOR_PICKUP', 'CANCELLED'],
+  READY_FOR_PICKUP: [],
+  DECLINED: [],
+  CANCELLED: [],
+};
+const PROGRESS_BY_STATUS: Record<string, number> = {
+  PENDING_ACCEPTANCE: 0,
+  CONFIRMED: 10,
+  IN_QUEUE: 30,
+  PRINTING: 75,
+  READY_FOR_PICKUP: 100,
+  DECLINED: 0,
+};
 
 function isObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -517,6 +534,249 @@ async function getOrCreateProfile(user: AuthUser) {
   };
 }
 
+function requireEnum(value: unknown, values: readonly string[], name: string): string {
+  if (typeof value !== 'string' || !values.includes(value)) {
+    fail(400, 'VALIDATION_ERROR', `Invalid ${name}`);
+  }
+  return value;
+}
+
+function modelFormatFromName(fileName: string): 'stl' | 'obj' | '3mf' {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  if (extension === 'stl' || extension === 'obj' || extension === '3mf') return extension;
+  fail(400, 'INVALID_FORMAT', 'Only .stl, .obj, and .3mf files are supported');
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function modelMetadata(row: JsonObject): JsonObject {
+  return {
+    id: row.id,
+    fileName: row.file_name,
+    format: row.format,
+    sizeBytes: Number(row.size_bytes ?? 0),
+    storagePath: row.storage_path,
+    triangleCount: Number(row.triangle_count ?? 0),
+    boundingBox: row.bounding_box,
+    volumeCm3: Number(row.volume_cm3 ?? 0),
+    units: row.units ?? 'mm',
+    isWatertight: Boolean(row.is_watertight),
+    createdAt: row.created_at,
+  };
+}
+
+function assertTransition(from: string, to: string): void {
+  if (!ORDER_STATUSES.includes(to)) fail(400, 'VALIDATION_ERROR', `Invalid order status: ${to}`);
+  if (from === to) return;
+  const allowed = STATUS_TRANSITIONS[from] ?? [];
+  if (!allowed.includes(to)) {
+    fail(400, 'INVALID_STATUS_TRANSITION', `Cannot change order status from ${from} to ${to}`);
+  }
+}
+
+/** Keep customer and provider screens in sync without a timer inside the function. */
+function projectDemoOrder(row: JsonObject): JsonObject {
+  if (!row.demo_started_at) return row;
+  const status = String(row.status ?? '');
+  if (status === 'DECLINED' || status === 'CANCELLED') return row;
+  const startedAt = Date.parse(String(row.demo_started_at));
+  if (!Number.isFinite(startedAt)) return row;
+
+  const elapsed = Math.max(0, Date.now() - startedAt);
+  const ratio = Math.min(1, elapsed / DEMO_DURATION_MS);
+  const progress = Math.round(ratio * 100);
+  let nextStatus = status;
+  if (ratio >= 1) nextStatus = 'READY_FOR_PICKUP';
+  else if (progress >= 5) nextStatus = 'PRINTING';
+  else if (elapsed >= 1500) nextStatus = 'IN_QUEUE';
+  else nextStatus = 'CONFIRMED';
+  return { ...row, progress, status: nextStatus };
+}
+
+async function loadOrder(orderId: string): Promise<JsonObject> {
+  const { data, error } = await db
+    .from('orders')
+    .select('*, printers(*), order_status_events(*)')
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) fail(500, 'ORDER_FETCH_FAILED', 'Could not load order');
+  if (!data) fail(404, 'ORDER_NOT_FOUND', 'Order not found');
+  return data as unknown as JsonObject;
+}
+
+async function providerForUser(userId: string): Promise<JsonObject | null> {
+  const { data, error } = await db
+    .from('providers')
+    .select('id, user_id, type')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
+  return (data as unknown as JsonObject | null) ?? null;
+}
+
+async function assertProviderOwnsOrder(order: JsonObject, userId: string): Promise<void> {
+  const printer = isObject(order.printers) ? order.printers : null;
+  if (!printer?.provider_id) fail(403, 'FORBIDDEN', 'You cannot manage this order');
+  const { data: provider } = await db
+    .from('providers')
+    .select('user_id')
+    .eq('id', String(printer.provider_id))
+    .maybeSingle();
+  if (provider?.user_id !== userId) {
+    fail(403, 'FORBIDDEN', 'This order belongs to another provider');
+  }
+}
+
+function configuredPrinterRate(printer: JsonObject, material: string): number {
+  const nested = Array.isArray(printer.printer_materials)
+    ? (printer.printer_materials as JsonObject[])
+    : [];
+  const configured = nested.find(
+    (rate) => rate.material === material && Number(rate.rate_per_cm3) > 0,
+  );
+  const fallback = Number(printer.price_per_cm3 ?? 0);
+  return configured
+    ? Number(configured.rate_per_cm3)
+    : fallback > 0
+      ? fallback
+      : (EDGE_MATERIAL_RATES[material] ?? 0.05);
+}
+
+function printerFits(printer: JsonObject, box: { x: number; y: number; z: number }): boolean {
+  const volume = isObject(printer.build_volume)
+    ? (printer.build_volume as { x: number; y: number; z: number })
+    : { x: 220, y: 220, z: 250 };
+  return (
+    Number(box.x) <= Number(volume.x) &&
+    Number(box.y) <= Number(volume.y) &&
+    Number(box.z) <= Number(volume.z)
+  );
+}
+
+async function resolveOrderPrinter(
+  printerRef: unknown,
+  providerRef: unknown,
+  material: string,
+  box: { x: number; y: number; z: number },
+): Promise<{ printer: JsonObject; provider: JsonObject }> {
+  if (printerRef !== undefined && printerRef !== null) {
+    const printerId = requireString(printerRef, 'printerId');
+    const { data: printer, error } = await db
+      .from('printers')
+      .select('*, printer_materials(*)')
+      .eq('id', printerId)
+      .maybeSingle();
+    if (error) fail(500, 'PRINTER_FETCH_FAILED', 'Could not load printer');
+    if (!printer) fail(404, 'PRINTER_NOT_FOUND', 'Printer not found');
+    const { data: provider, error: providerError } = await db
+      .from('providers')
+      .select('id, user_id, type, display_name, pickup_area, pickup_address')
+      .eq('id', String(printer.provider_id ?? ''))
+      .maybeSingle();
+    if (providerError) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
+    if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider not found');
+    return {
+      printer: printer as unknown as JsonObject,
+      provider: provider as unknown as JsonObject,
+    };
+  }
+
+  if (providerRef !== undefined && providerRef !== null) {
+    const providerId = requireString(providerRef, 'providerId');
+    const { data: provider, error } = await db
+      .from('providers')
+      .select(
+        'id, user_id, type, display_name, pickup_area, pickup_address, printers(*, printer_materials(*))',
+      )
+      .eq('id', providerId)
+      .maybeSingle();
+    if (error) fail(500, 'PROVIDER_FETCH_FAILED', 'Could not load provider profile');
+    if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider not found');
+
+    const providerRow = provider as unknown as JsonObject;
+    const candidates = ((providerRow.printers as JsonObject[] | null) ?? []).filter((printer) => {
+      if (printer.is_active === false) return false;
+      const nested = Array.isArray(printer.printer_materials)
+        ? (printer.printer_materials as JsonObject[])
+        : [];
+      const supportsMaterial = nested.length
+        ? nested.some((rate) => rate.material === material && Number(rate.rate_per_cm3) > 0)
+        : ((printer.materials as string[] | null) ?? []).includes(material);
+      return supportsMaterial && printerFits(printer, box);
+    });
+    candidates.sort(
+      (a, b) => configuredPrinterRate(a, material) - configuredPrinterRate(b, material),
+    );
+    const printer = candidates[0];
+    if (!printer) {
+      fail(
+        409,
+        'NO_SUITABLE_PRINTER',
+        'This provider has no printer that can make this model with the selected material',
+      );
+    }
+    const { printers: _printers, ...providerFields } = providerRow;
+    return { printer, provider: providerFields };
+  }
+
+  fail(400, 'VALIDATION_ERROR', 'providerId or printerId is required');
+}
+
+function marketplaceEstimate(
+  material: string,
+  volumeCm3: number,
+  quality: string,
+  quantity: number,
+  rate: number,
+): number {
+  const factor = QUALITY_FACTORS[quality] ?? QUALITY_FACTORS.STANDARD;
+  return Number((rate * volumeCm3 * quantity * factor).toFixed(2));
+}
+
+async function changeOrderStatus(
+  user: AuthUser,
+  orderId: string,
+  nextStatus: string,
+  notes: string,
+): Promise<JsonObject> {
+  const current = await loadOrder(orderId);
+  const isCustomer = current.user_id === user.id;
+  if (isCustomer) {
+    if (nextStatus !== 'CANCELLED') {
+      fail(403, 'FORBIDDEN', 'Only the provider can change this status');
+    }
+  } else {
+    await assertProviderOwnsOrder(current, user.id);
+  }
+  if (current.status === nextStatus) return formatOrderForClient(current);
+  assertTransition(String(current.status), nextStatus);
+
+  const { error } = await db
+    .from('orders')
+    .update({
+      status: nextStatus,
+      progress: PROGRESS_BY_STATUS[nextStatus] ?? Number(current.progress ?? 0),
+      demo_started_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', orderId);
+  if (error) fail(500, 'ORDER_UPDATE_FAILED', 'Could not update order');
+  await db.from('order_status_events').insert({ order_id: orderId, status: nextStatus, notes });
+  return formatOrderForClient(await loadOrder(orderId));
+}
+
+async function formatOrderForClient(row: JsonObject): Promise<JsonObject> {
+  const withPrivacy = await orderWithAddressPrivacy(projectDemoOrder(row));
+  return {
+    ...withPrivacy,
+    modelId: withPrivacy.model_id,
+    price_snapshot: Number(withPrivacy.price_snapshot ?? 0),
+    progress: Number(withPrivacy.progress ?? 0),
+  };
+}
+
 async function orderWithAddressPrivacy(row: JsonObject): Promise<JsonObject> {
   const printers = row.printers;
   const printer = isObject(printers)
@@ -604,8 +864,9 @@ async function publicProviderSearch(url: URL): Promise<JsonObject> {
         ? (printer.printer_materials as JsonObject[])
         : [];
       if (printer.printer_materials !== undefined) {
-        if (nested.length === 0) return false;
-        if (materialParam) return nested.some((rate) => rate.material === materialParam);
+        const publicRates = nested.filter((rate) => Number(rate.rate_per_cm3) > 0);
+        if (publicRates.length === 0) return false;
+        if (materialParam) return publicRates.some((rate) => rate.material === materialParam);
         return true;
       }
       if (materialParam)
@@ -649,10 +910,15 @@ async function publicProviderSearch(url: URL): Promise<JsonObject> {
         ? (printer.printer_materials as JsonObject[])
         : [];
       const material = materialParam ?? String(nested[0]?.material ?? 'PLA');
-      const configured = nested.find((rate) => rate.material === material);
+      const configured = nested.find(
+        (rate) => rate.material === material && Number(rate.rate_per_cm3) > 0,
+      );
+      const legacyRate = Number(printer.price_per_cm3 ?? 0);
       const rate = configured
         ? Number(configured.rate_per_cm3)
-        : Number(printer.price_per_cm3 ?? EDGE_MATERIAL_RATES[material] ?? 0.05);
+        : legacyRate > 0
+          ? legacyRate
+          : (EDGE_MATERIAL_RATES[material] ?? 0.05);
       // Keep search estimates aligned with the documented formula:
       // ratePerCm3 × volumeCm3 × quantity × qualityFactor (STANDARD = 1 here).
       return {
@@ -803,6 +1069,7 @@ async function route(request: Request): Promise<Response> {
 
   if (path.startsWith('/orders')) {
     const user = await requireUser(request);
+
     if (method === 'GET' && path === '/orders') {
       const { data, error } = await db
         .from('orders')
@@ -811,20 +1078,38 @@ async function route(request: Request): Promise<Response> {
         .order('created_at', { ascending: false });
       if (error) fail(500, 'DATABASE_ERROR', 'Could not load orders');
       const orders = await Promise.all(
-        ((data as JsonObject[] | null) ?? []).map((row) => orderWithAddressPrivacy(row)),
+        ((data as JsonObject[] | null) ?? []).map((row) => formatOrderForClient(row)),
+      );
+      return json({ orders });
+    }
+
+    if (method === 'GET' && path === '/orders/provider') {
+      const provider = await providerForUser(user.id);
+      if (!provider) fail(404, 'PROVIDER_NOT_FOUND', 'Provider profile not found');
+      const { data: printers, error: printerError } = await db
+        .from('printers')
+        .select('id')
+        .eq('provider_id', String(provider.id));
+      if (printerError) fail(500, 'PRINTERS_FETCH_FAILED', 'Could not load your printers');
+      const ids = (printers ?? []).map((printer) => String(printer.id));
+      if (!ids.length) return json({ orders: [] });
+      const { data, error } = await db
+        .from('orders')
+        .select('*, printers(*), order_status_events(*)')
+        .in('printer_id', ids)
+        .order('created_at', { ascending: false });
+      if (error) fail(500, 'ORDERS_FETCH_FAILED', 'Could not load provider orders');
+      const orders = await Promise.all(
+        ((data as JsonObject[] | null) ?? []).map((row) => formatOrderForClient(row)),
       );
       return json({ orders });
     }
 
     if (method === 'POST' && path === '/orders') {
       const body = await bodyOf(request);
-      const modelId = requireString(body.model_id, 'model_id');
-      const printerId = requireString(body.printer_id, 'printer_id');
-      const material = body.material;
-      const quality = body.quality;
-      if (!isMaterial(material) || !isQuality(quality)) {
-        fail(400, 'VALIDATION_ERROR', 'Invalid material or quality');
-      }
+      const modelId = requireString(body.modelId ?? body.model_id, 'modelId');
+      const material = requireEnum(body.material, MATERIALS, 'material');
+      const quality = requireEnum(body.quality, QUALITIES, 'quality');
       const quantity = Number(body.quantity ?? 1);
       const infill = Number(body.infill ?? 20);
       if (
@@ -836,152 +1121,230 @@ async function route(request: Request): Promise<Response> {
       ) {
         fail(400, 'VALIDATION_ERROR', 'Invalid quantity or infill');
       }
-      const { data: printer, error: printerError } = await db
-        .from('printers')
-        .select('*')
-        .eq('id', printerId)
-        .maybeSingle();
-      if (printerError) fail(500, 'DATABASE_ERROR', 'Could not load printer');
-      if (!printer) fail(404, 'NOT_FOUND', 'Printer not found');
 
-      let orderStatus = 'CONFIRMED';
-      if (printer.provider_id) {
-        const { data: provider } = await db
-          .from('providers')
-          .select('user_id, type')
-          .eq('id', printer.provider_id)
-          .maybeSingle();
-        if (provider?.user_id === user.id) {
-          fail(403, 'CANNOT_ORDER_OWN_MODEL', 'You cannot order from yourself');
-        }
-        if (provider?.type === 'INDIVIDUAL') orderStatus = 'PENDING_ACCEPTANCE';
+      const { data: model, error: modelError } = await db
+        .from('models')
+        .select('user_id, owner, volume_cm3, bounding_box')
+        .eq('id', modelId)
+        .maybeSingle();
+      if (modelError) fail(500, 'MODEL_FETCH_FAILED', 'Could not load the model');
+      if (!model) fail(404, 'MODEL_NOT_FOUND', 'Model not found');
+      const ownerId = (model.user_id as string | null) ?? (model.owner as string | null);
+      if (ownerId && ownerId !== user.id) {
+        fail(403, 'FORBIDDEN', 'This model belongs to another user');
       }
-      const { data: configuredRateRow } = await db
-        .from('printer_materials')
-        .select('rate_per_cm3')
-        .eq('printer_id', printerId)
-        .eq('material', material)
-        .maybeSingle();
-      const configuredRate = Number(configuredRateRow?.rate_per_cm3 ?? 0);
-      const globalRate = EDGE_MATERIAL_RATES[material] ?? 0.05;
-      const rateFactor =
-        configuredRate > 0 ? configuredRate / globalRate : Number(printer.price_factor ?? 1);
+      const volumeCm3 = Number(model.volume_cm3 ?? 0);
+      const boundingBox = model.bounding_box;
+      if (!Number.isFinite(volumeCm3) || volumeCm3 <= 0 || !isObject(boundingBox)) {
+        fail(422, 'INVALID_MODEL', 'The model has no usable volume or bounding box');
+      }
 
-      const number = crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase();
-      const eta = new Date(
-        Date.now() + Number(printer.est_completion_hours_per_unit || 2) * quantity * 3600000,
+      const { printer, provider } = await resolveOrderPrinter(
+        body.printerId ?? body.printer_id,
+        body.providerId ?? body.provider_id,
+        material,
+        boundingBox as { x: number; y: number; z: number },
       );
+      if (provider.user_id === user.id) {
+        fail(403, 'CANNOT_ORDER_OWN_MODEL', 'You cannot order from yourself');
+      }
+
+      const rate = configuredPrinterRate(printer, material);
+      const orderStatus = provider.type === 'INDIVIDUAL' ? 'PENDING_ACCEPTANCE' : 'CONFIRMED';
+      const etaHours = Number(printer.est_completion_hours_per_unit ?? 24) || 24;
+      const orderNumber = crypto.randomUUID().replaceAll('-', '').slice(0, 7).toUpperCase();
+      const now = new Date().toISOString();
+
       const { data: order, error } = await db
         .from('orders')
         .insert({
-          order_number: number,
+          order_number: orderNumber,
           user_id: user.id,
           model_id: modelId,
-          printer_id: printerId,
+          printer_id: String(printer.id),
           material,
           quality,
           color: typeof body.color === 'string' ? body.color : null,
-          payment_method: body.payment_method === 'PROMPTPAY' ? 'PROMPTPAY' : 'CASH_ON_PICKUP',
+          payment_method:
+            (body.paymentMethod ?? body.payment_method) === 'PROMPTPAY'
+              ? 'PROMPTPAY'
+              : 'CASH_ON_PICKUP',
           infill,
           quantity,
-          price_snapshot: estimatePrice(material, quality, quantity, rateFactor),
+          price_snapshot: marketplaceEstimate(material, volumeCm3, quality, quantity, rate),
           status: orderStatus,
           progress: 0,
-          eta: eta.toISOString(),
+          eta: new Date(Date.now() + etaHours * quantity * 3_600_000).toISOString(),
+          created_at: now,
+          updated_at: now,
         })
         .select()
         .single();
-      if (error || !order) fail(500, 'DATABASE_ERROR', 'Could not create order');
-      const event = await db.from('order_status_events').insert({
-        order_id: order.id,
+      if (error || !order) fail(500, 'ORDER_CREATE_FAILED', 'Could not create order');
+      await db.from('order_status_events').insert({
+        order_id: String(order.id),
         status: orderStatus,
         notes:
           orderStatus === 'PENDING_ACCEPTANCE'
             ? 'Order placed. Waiting for the provider to accept.'
             : 'Order created and confirmed.',
       });
-      if (event.error)
-        fail(500, 'DATABASE_ERROR', 'Order created, but its status event could not be saved');
-      return json({ order }, 201);
+      return json({ order: await formatOrderForClient(await loadOrder(String(order.id))) }, 201);
     }
 
-    const orderMatch = /^\/orders\/([^/]+)(?:\/status)?$/.exec(path);
-    if (orderMatch) {
-      const orderId = decodeURIComponent(orderMatch[1]);
-      if (method === 'GET' && path === `/orders/${orderMatch[1]}`) {
-        const { data, error } = await db
-          .from('orders')
-          .select('*, printers(*), order_status_events(*)')
-          .eq('id', orderId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (error) fail(500, 'DATABASE_ERROR', 'Could not load order');
-        if (!data) fail(404, 'NOT_FOUND', 'Order not found');
-        return json({ order: await orderWithAddressPrivacy(data as unknown as JsonObject) });
-      }
+    const acceptMatch = /^\/orders\/([^/]+)\/accept$/.exec(path);
+    if (method === 'POST' && acceptMatch) {
+      return json({
+        order: await changeOrderStatus(
+          user,
+          decodeURIComponent(acceptMatch[1]),
+          'CONFIRMED',
+          'Provider accepted the order.',
+        ),
+      });
+    }
 
-      if (method === 'PATCH' && path.endsWith('/status')) {
-        const body = await bodyOf(request);
-        const status = body.status;
-        const statusProgress: Record<string, number> = {
-          CONFIRMED: 10,
-          PENDING_ACCEPTANCE: 0,
-          IN_QUEUE: 30,
-          PRINTING: 75,
-          READY_FOR_PICKUP: 100,
-          DECLINED: 0,
-        };
-        if (typeof status !== 'string' || statusProgress[status] === undefined) {
-          fail(400, 'VALIDATION_ERROR', 'Invalid order status');
-        }
-        const { data: current, error: currentError } = await db
-          .from('orders')
-          .select('id, user_id, printer_id')
-          .eq('id', orderId)
-          .maybeSingle();
-        if (currentError) fail(500, 'DATABASE_ERROR', 'Could not load order');
-        if (!current) fail(404, 'NOT_FOUND', 'Order not found');
-        let authorized = current.user_id === user.id;
-        if (!authorized) {
-          const { data: printer } = await db
-            .from('printers')
-            .select('provider_id')
-            .eq('id', current.printer_id)
-            .maybeSingle();
-          if (printer?.provider_id) {
-            const { data: provider } = await db
-              .from('providers')
-              .select('user_id')
-              .eq('id', printer.provider_id)
-              .maybeSingle();
-            authorized = provider?.user_id === user.id;
-          }
-        }
-        if (!authorized) fail(403, 'FORBIDDEN', 'You cannot update this order');
-        const { data: order, error } = await db
-          .from('orders')
-          .update({
-            status,
-            progress: statusProgress[status],
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', orderId)
-          .select('*, printers(*)')
-          .single();
-        if (error || !order) fail(500, 'DATABASE_ERROR', 'Could not update order');
-        const event = await db.from('order_status_events').insert({
-          order_id: orderId,
+    const declineMatch = /^\/orders\/([^/]+)\/decline$/.exec(path);
+    if (method === 'POST' && declineMatch) {
+      return json({
+        order: await changeOrderStatus(
+          user,
+          decodeURIComponent(declineMatch[1]),
+          'DECLINED',
+          'Provider declined the order.',
+        ),
+      });
+    }
+
+    const demoMatch = /^\/orders\/([^/]+)\/demo\/start$/.exec(path);
+    if (method === 'POST' && demoMatch) {
+      const orderId = decodeURIComponent(demoMatch[1]);
+      let current = await loadOrder(orderId);
+      await assertProviderOwnsOrder(current, user.id);
+      let status = String(current.status);
+      if (status === 'PENDING_ACCEPTANCE') {
+        current = await loadOrder(
+          String(
+            (await changeOrderStatus(user, orderId, 'CONFIRMED', 'Provider accepted the order.'))
+              .id,
+          ),
+        );
+        status = 'CONFIRMED';
+      } else if (!['CONFIRMED', 'IN_QUEUE', 'PRINTING'].includes(status)) {
+        fail(409, 'DEMO_NOT_AVAILABLE', `A ${status} order cannot be used for the print demo.`);
+      }
+      const startedAt = new Date().toISOString();
+      const { error } = await db
+        .from('orders')
+        .update({
           status,
-          notes:
-            typeof body.notes === 'string' && body.notes
-              ? body.notes
-              : `Status updated to ${status}`,
-        });
-        if (event.error)
-          fail(500, 'DATABASE_ERROR', 'Order updated, but its status event could not be saved');
-        return json({ order: await orderWithAddressPrivacy(order as unknown as JsonObject) });
-      }
+          progress: 0,
+          demo_started_at: startedAt,
+          updated_at: startedAt,
+        })
+        .eq('id', orderId);
+      if (error) fail(500, 'ORDER_UPDATE_FAILED', 'Could not start the demo print');
+      await db.from('order_status_events').insert({
+        order_id: orderId,
+        status,
+        notes: 'Demo print started. Progress advances automatically.',
+      });
+      return json({ order: await formatOrderForClient(await loadOrder(orderId)) });
     }
+
+    const progressMatch = /^\/orders\/([^/]+)\/progress$/.exec(path);
+    if (method === 'PATCH' && progressMatch) {
+      const orderId = decodeURIComponent(progressMatch[1]);
+      const current = await loadOrder(orderId);
+      await assertProviderOwnsOrder(current, user.id);
+      const body = await bodyOf(request);
+      const progress = Number(body.progress);
+      if (!Number.isInteger(progress) || progress < 0 || progress > 100) {
+        fail(400, 'VALIDATION_ERROR', 'progress must be an integer between 0 and 100');
+      }
+      const nextStatus =
+        body.status === undefined
+          ? String(current.status)
+          : requireEnum(body.status, ORDER_STATUSES, 'order status');
+      // The provider sees the projected demo status, not the stored one. Validate
+      // against what they can see so a manual update can take over a running demo.
+      if (body.status !== undefined) {
+        const visibleStatus = String(projectDemoOrder(current).status ?? current.status);
+        assertTransition(visibleStatus, nextStatus);
+      }
+      const { error } = await db
+        .from('orders')
+        .update({
+          status: nextStatus,
+          progress,
+          demo_started_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+      if (error) fail(500, 'ORDER_UPDATE_FAILED', 'Could not update order');
+      if (nextStatus !== current.status) {
+        await db.from('order_status_events').insert({
+          order_id: orderId,
+          status: nextStatus,
+          notes: `Status updated to ${nextStatus}`,
+        });
+      }
+      return json({ order: await formatOrderForClient(await loadOrder(orderId)) });
+    }
+
+    const statusMatch = /^\/orders\/([^/]+)\/status$/.exec(path);
+    if (method === 'PATCH' && statusMatch) {
+      const body = await bodyOf(request);
+      const status = requireEnum(body.status, ORDER_STATUSES, 'order status');
+      return json({
+        order: await changeOrderStatus(
+          user,
+          decodeURIComponent(statusMatch[1]),
+          status,
+          typeof body.notes === 'string' && body.notes ? body.notes : `Status updated to ${status}`,
+        ),
+      });
+    }
+
+    const orderMatch = /^\/orders\/([^/]+)$/.exec(path);
+    if (method === 'GET' && orderMatch) {
+      const orderId = decodeURIComponent(orderMatch[1]);
+      const order = await loadOrder(orderId);
+      if (order.user_id !== user.id) await assertProviderOwnsOrder(order, user.id);
+      return json({ order: await formatOrderForClient(order) });
+    }
+  }
+
+  if (method === 'POST' && path === '/pricing/estimate') {
+    await requireUser(request);
+    const body = await bodyOf(request);
+    const modelId = requireString(body.modelId, 'modelId');
+    const material = requireEnum(body.material, MATERIALS, 'material');
+    const quality = requireEnum(body.quality, QUALITIES, 'quality');
+    const quantity = Number(body.quantity ?? 1);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      fail(400, 'VALIDATION_ERROR', 'quantity must be a positive integer');
+    }
+    const { data: model, error } = await db
+      .from('models')
+      .select('volume_cm3')
+      .eq('id', modelId)
+      .maybeSingle();
+    if (error) fail(500, 'MODEL_FETCH_FAILED', 'Could not load the model');
+    if (!model) fail(404, 'MODEL_NOT_FOUND', 'Model not found');
+    const volumeCm3 = Number(model.volume_cm3 ?? 0);
+    if (!Number.isFinite(volumeCm3) || volumeCm3 <= 0) {
+      fail(422, 'INVALID_MODEL', 'The model has no usable volume');
+    }
+    return json({
+      estimate: marketplaceEstimate(
+        material,
+        volumeCm3,
+        quality,
+        quantity,
+        EDGE_MATERIAL_RATES[material],
+      ),
+    });
   }
 
   if (path.startsWith('/profile')) {
@@ -1443,7 +1806,10 @@ async function route(request: Request): Promise<Response> {
         .in('printer_id', ids)
         .order('created_at', { ascending: false });
       if (error) fail(500, 'ORDERS_FETCH_FAILED', 'Could not load provider orders');
-      return json({ orders: data ?? [] });
+      const orders = await Promise.all(
+        ((data as JsonObject[] | null) ?? []).map((row) => formatOrderForClient(row)),
+      );
+      return json({ orders });
     }
 
     if (method === 'PATCH' && path === '/providers/me') {
@@ -1559,14 +1925,91 @@ async function route(request: Request): Promise<Response> {
     }
   }
 
-  const uploadMatch = path === '/models/upload-url';
-  if (method === 'POST' && uploadMatch) {
-    await requireUser(request);
+  if (method === 'POST' && path === '/models/upload-url') {
+    const user = await requireUser(request);
     const body = await bodyOf(request);
     const fileName = requireString(body.fileName, 'fileName');
-    const { data, error } = await db.storage.from('models').createSignedUploadUrl(fileName);
-    if (error) fail(400, 'UPLOAD_URL_ERROR', error.message);
-    return json({ url: data.signedUrl, token: data.token, path: data.path });
+    modelFormatFromName(fileName);
+    if (body.sizeBytes !== undefined) {
+      const sizeBytes = Number(body.sizeBytes);
+      if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_MODEL_BYTES) {
+        fail(400, 'INVALID_FILE_SIZE', 'File size must be between 1 byte and 50 MB');
+      }
+    }
+    const storagePath = `${user.id}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`;
+    const { data, error } = await db.storage.from(MODEL_BUCKET).createSignedUploadUrl(storagePath);
+    if (error || !data)
+      fail(400, 'UPLOAD_URL_ERROR', error?.message ?? 'Could not create upload URL');
+    return json({
+      path: storagePath,
+      signedUrl: data.signedUrl,
+      url: data.signedUrl,
+      token: data.token,
+    });
+  }
+
+  if (method === 'POST' && path === '/models') {
+    const user = await requireUser(request);
+    const body = await bodyOf(request);
+    const storagePath = requireString(body.path, 'path');
+    if (!storagePath.startsWith(`${user.id}/`)) {
+      fail(403, 'FORBIDDEN', 'This upload belongs to another user');
+    }
+    const format = modelFormatFromName(storagePath);
+    const { data: file, error: downloadError } = await db.storage
+      .from(MODEL_BUCKET)
+      .download(storagePath);
+    if (downloadError || !file) {
+      fail(404, 'FILE_NOT_FOUND', 'Uploaded file could not be retrieved from storage');
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let parsed;
+    try {
+      parsed = parseModel(format, bytes);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not parse 3D model';
+      fail(400, 'PARSE_ERROR', message);
+    }
+    const { data: inserted, error: insertError } = await db
+      .from('models')
+      .insert({
+        user_id: user.id,
+        owner: user.id,
+        file_name: storagePath.split('/').pop() ?? storagePath,
+        format,
+        size_bytes: bytes.byteLength,
+        storage_path: storagePath,
+        triangle_count: parsed.triangleCount,
+        bounding_box: parsed.boundingBox,
+        volume_cm3: parsed.volumeCm3,
+        units: 'mm',
+        is_watertight: parsed.isWatertight,
+      })
+      .select('*')
+      .single();
+    if (insertError || !inserted) {
+      fail(500, 'DATABASE_ERROR', insertError?.message ?? 'Could not save model metadata');
+    }
+    return json(modelMetadata(inserted as unknown as JsonObject), 201);
+  }
+
+  const modelMatch = /^\/models\/([^/]+)$/.exec(path);
+  if (method === 'GET' && modelMatch) {
+    await requireUser(request);
+    const modelId = decodeURIComponent(modelMatch[1]);
+    const { data: model, error } = await db
+      .from('models')
+      .select('*')
+      .eq('id', modelId)
+      .maybeSingle();
+    if (error || !model) fail(404, 'NOT_FOUND', 'Model not found');
+    const { data: signed, error: signedError } = await db.storage
+      .from(MODEL_BUCKET)
+      .createSignedUrl(String(model.storage_path), 3600);
+    if (signedError || !signed) {
+      fail(500, 'STORAGE_ERROR', signedError?.message ?? 'Could not generate download URL');
+    }
+    return json({ ...modelMetadata(model as unknown as JsonObject), viewUrl: signed.signedUrl });
   }
 
   const processMatch = /^\/models\/([^/]+)\/process$/.exec(path);
@@ -1575,20 +2018,20 @@ async function route(request: Request): Promise<Response> {
     const id = decodeURIComponent(processMatch[1]);
     const body = await bodyOf(request);
     if (!isMaterial(body.material)) fail(400, 'VALIDATION_ERROR', 'Invalid material');
-    const { data: file, error: downloadError } = await db.storage.from('models').download(id);
+    const { data: file, error: downloadError } = await db.storage.from(MODEL_BUCKET).download(id);
     if (downloadError || !file) fail(400, 'PROCESS_MODEL_ERROR', 'File not found');
-    const dimensions = { x: 10, y: 10, z: 10 };
-    const volume = 12.5;
+    const format = modelFormatFromName(id);
+    const parsed = parseModel(format, new Uint8Array(await file.arrayBuffer()));
     const { error } = await db.from('model_files').insert({
       id,
       user_id: user.id,
       file_name: id,
       material: body.material,
-      volume_cm3: volume,
-      dimensions,
+      volume_cm3: parsed.volumeCm3,
+      dimensions: parsed.boundingBox,
     });
     if (error) fail(400, 'PROCESS_MODEL_ERROR', 'Could not save model details');
-    return json({ id, dimensions, volume });
+    return json({ id, dimensions: parsed.boundingBox, volume: parsed.volumeCm3 });
   }
 
   fail(404, 'NOT_FOUND', 'Route not found');

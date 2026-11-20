@@ -1,5 +1,5 @@
 import type { ModelFormat } from '@forge/types';
-import type { ParsedModel, Triangle } from './types';
+import type { ParsedModel, Triangle } from './types.ts';
 
 /**
  * Rounds a floating-point number to specified decimal places.

@@ -419,7 +419,12 @@ export async function updateProgress(
   await assertProviderOwnsOrder(current, userId);
 
   const nextStatus = (input.status as OrderStatus | undefined) ?? current.status;
-  if (nextStatus !== current.status) assertTransition(current.status, nextStatus);
+  if (input.status !== undefined) {
+    // Providers see the projected demo status, so validate against that view
+    // when they take over a running demo with a manual update.
+    const visibleStatus = projectDemoOrder(current).status;
+    assertTransition(visibleStatus, nextStatus);
+  }
 
   const { error } = await supabaseAdmin
     .from('orders')

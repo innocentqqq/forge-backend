@@ -1,12 +1,12 @@
 import type { ModelFormat } from '@forge/types';
-import { parseObj } from './obj';
-import { parseStl } from './stl';
-import type { ParsedModel } from './types';
+import { parseObj } from './obj.ts';
+import { parseStl } from './stl.ts';
+import type { ParsedModel } from './types.ts';
 
-export * from './obj';
-export * from './stl';
-export * from './types';
-export * from './utils';
+export * from './obj.ts';
+export * from './stl.ts';
+export * from './types.ts';
+export * from './utils.ts';
 
 export function parseModel(
   format: ModelFormat,

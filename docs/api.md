@@ -385,4 +385,6 @@ orders hide it (labs continue to show their public pickup address).
 
 For the demo endpoint, `GET /orders/:id` derives `progress` and `status` from
 `demo_started_at` so both customer and provider screens advance without a background timer.
-A manual progress/status update cancels the demo projection.
+A manual progress/status update cancels the demo projection. When a status is supplied,
+it is validated against the projected status the provider can see, so a manual action can
+take over a running demo without being rejected for a stale stored status.

@@ -1,5 +1,5 @@
-import type { ParsedModel, Triangle } from './types';
-import { computeMeshMetrics } from './utils';
+import type { ParsedModel, Triangle } from './types.ts';
+import { computeMeshMetrics } from './utils.ts';
 
 /**
  * Parses an STL file (binary or ASCII) and calculates triangle count,
