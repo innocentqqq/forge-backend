@@ -4,15 +4,22 @@ import { AppError } from '../../middleware/error';
 import {
   acceptOrder,
   createOrder,
+  createOrderMessage,
   declineOrder,
   getOrder,
   listCustomerOrders,
+  listOrderMessages,
   listProviderOrders,
   startDemoPrint,
   updateProgress,
   updateStatus,
 } from './orders.service';
-import { createOrderSchema, progressSchema, statusSchema } from './orders.schemas';
+import {
+  createMessageSchema,
+  createOrderSchema,
+  progressSchema,
+  statusSchema,
+} from './orders.schemas';
 
 function orderId(req: Request): string {
   const id = req.params.id;
@@ -66,4 +73,15 @@ export async function declineOrderHandler(req: Request, res: Response): Promise<
 export async function startDemoPrintHandler(req: Request, res: Response): Promise<void> {
   const user = getAuthUser(req);
   res.status(200).json({ order: await startDemoPrint(user.id, orderId(req)) });
+}
+
+export async function listMessagesHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  res.status(200).json({ messages: await listOrderMessages(user.id, orderId(req)) });
+}
+
+export async function createMessageHandler(req: Request, res: Response): Promise<void> {
+  const user = getAuthUser(req);
+  const input = createMessageSchema.parse(req.body);
+  res.status(201).json({ message: await createOrderMessage(user.id, orderId(req), input.body) });
 }

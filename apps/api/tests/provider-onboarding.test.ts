@@ -638,7 +638,15 @@ describe('order pickup and completion handoff', () => {
         data: providerRow({ user_id: 'provider-user', type: 'INDIVIDUAL' }),
         error: null,
       },
-      provider_private: { data: null, error: null },
+      provider_private: { data: { contact_phone: '+66 2 123 4567' }, error: null },
+      profiles: {
+        data: {
+          id: 'customer-user',
+          full_name: 'Casey Customer',
+          phone: '+66 81 000 0000',
+        },
+        error: null,
+      },
       order_status_events: { data: [], error: null },
     });
     fromMock('orders')
@@ -668,6 +676,8 @@ describe('order pickup and completion handoff', () => {
     });
     expect(updated.status).toBe('PICKED_UP');
     expect(updated.progress).toBe(100);
+    expect(updated.customer?.phone).toBe('+66 81 000 0000');
+    expect(updated.provider?.phone).toBe('+66 2 123 4567');
   });
 
   it('accepts pickup from a projected ready state while the demo is running', async () => {

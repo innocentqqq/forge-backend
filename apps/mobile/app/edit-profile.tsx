@@ -12,6 +12,7 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,6 +23,7 @@ export default function EditProfileScreen() {
       .then((result) => {
         setProfile(result);
         setName(result.fullName ?? '');
+        setPhone(result.phone ?? '');
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load profile'))
       .finally(() => setLoading(false));
@@ -31,7 +33,10 @@ export default function EditProfileScreen() {
     setSaving(true);
     setError('');
     try {
-      await api.updateProfile({ fullName: name.trim() || null });
+      await api.updateProfile({
+        fullName: name.trim() || null,
+        phone: phone.trim() || null,
+      });
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save profile');
@@ -88,6 +93,16 @@ export default function EditProfileScreen() {
             value={profile?.email ?? ''}
             editable={false}
             placeholder="you@example.com"
+          />
+          <TextField
+            label="Phone number"
+            hint="Shared with the provider after you place an order."
+            icon={icons.phone}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            autoComplete="tel"
+            placeholder="+66 81 234 5678"
           />
         </View>
 

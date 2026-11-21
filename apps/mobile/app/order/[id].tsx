@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ModelViewer } from '../../components/ModelViewer';
 import { AppHeader, Button, ErrorView, LoadingView, ProgressBar, Screen, StatusPill } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
@@ -73,12 +73,15 @@ export default function OrderTrackingScreen() {
     }
   };
   const openDirections = () => {
-    const providerName = order.printers?.name ?? '3D printing provider';
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(providerName)}`;
+    const destination =
+      order.provider?.pickupAddress ??
+      order.printers?.name ??
+      '3D printing provider';
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
     void Linking.openURL(url);
   };
-  const contactProvider = () => {
-    Alert.alert('Contact provider', 'Provider contact details are not available in this order yet.');
+  const openMessages = () => {
+    router.push(`/messages/${order.id}?role=customer`);
   };
 
   return (
@@ -191,9 +194,9 @@ export default function OrderTrackingScreen() {
             <Icon name={icons.pin} size={20} color={colors.text} />
             <Text style={styles.actionLabel}>Directions</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={contactProvider} style={styles.action}>
-            <Icon name={icons.phone} size={20} color={colors.text} />
-            <Text style={styles.actionLabel}>Contact provider</Text>
+          <Pressable accessibilityRole="button" onPress={openMessages} style={styles.action}>
+            <Icon name={icons.chat} size={20} color={colors.text} />
+            <Text style={styles.actionLabel}>Contact &amp; messages</Text>
           </Pressable>
         </View>
 

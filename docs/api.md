@@ -4,6 +4,25 @@ This document outlines the API endpoints for Forge. Every authenticated request 
 
 ---
 
+## Profile and account security
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/profile` | Get the authenticated user's profile |
+| `PATCH` | `/profile` | Update `fullName`, `avatarUrl`, `phone`, notification flags, or preferences |
+| `GET` | `/profile/stats` | Get print/order counts |
+
+`phone` is optional (`3`–`32` characters, or `null`) and is only returned to its owner. It is
+included as `customer.phone` on that user's order responses so the provider can contact them for
+pickup. Provider contact numbers are managed through `GET/PATCH /providers/me` as `contactPhone`
+and returned as `provider.phone` on order responses. Neither number appears in public search.
+
+Password changes, password-reset emails, verification emails, and sign-out are handled directly by
+Supabase Auth from the mobile Security screen; the Forge API does not receive passwords or service-role
+credentials.
+
+---
+
 ## Models (Agent 1)
 
 Endpoints for uploading 3D model files, analyzing mesh geometry, and retrieving signed viewing URLs.
@@ -382,6 +401,8 @@ and `PATCH /orders/:id/progress` return `403 FORBIDDEN` if the caller tries the 
 | `PATCH` | `/orders/:id/status` | Provider advances status; customer may cancel or confirm pickup |
 | `PATCH` | `/orders/:id/progress` | Provider sets `progress` 0–100, optionally `status` |
 | `POST` | `/orders/:id/demo/start` | Dev helper: accept if needed and start a 60-second print demo |
+| `GET` | `/orders/:id/messages` | List the order's customer/provider message thread |
+| `POST` | `/orders/:id/messages` | Send a message on the order (body: `{ body }`) |
 
 Order creation rejects a provider ordering their own model with
 `403 CANNOT_ORDER_OWN_MODEL`. The price snapshot uses the selected printer's configured
@@ -389,6 +410,25 @@ material rate when present and falls back to the global `MATERIAL_RATES` otherwi
 For individual providers, the exact pickup address is only returned on order responses
 once the status is `CONFIRMED` or later; `PENDING_ACCEPTANCE`, `DECLINED` and `CANCELLED`
 orders hide it (labs continue to show their public pickup address).
+
+Order responses include limited contact details for the two parties only:
+`provider.phone` comes from `provider_private.contact_phone`, and
+`customer.phone` comes from `profiles.phone`. They are never included in public provider
+search results. Either party can open the contact card and message thread from the order.
+
+### Order messages
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/orders/:id/messages` | List messages oldest first |
+| `POST` | `/orders/:id/messages` | Send a message; body `{ body }`, 1–2000 non-whitespace characters |
+
+Both routes require authentication and accept only the order's customer or the provider who owns
+the order's printer. Everyone else receives `403 FORBIDDEN`. Responses use
+`{ messages: OrderMessage[] }` and `{ message: OrderMessage }`; each message carries
+`id`, `orderId`, `senderId`, `senderRole` (`CUSTOMER` or `PROVIDER`), `body`, and `createdAt`.
+Messages are listed by `created_at` ascending. The mobile thread polls every five seconds while
+the conversation screen is focused.
 
 For the demo endpoint, `GET /orders/:id` derives `progress` and `status` from
 `demo_started_at` so both customer and provider screens advance without a background timer.

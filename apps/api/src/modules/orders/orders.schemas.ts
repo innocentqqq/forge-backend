@@ -59,6 +59,11 @@ export const statusSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+export const createMessageSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type ProgressInput = z.infer<typeof progressSchema>;
 export type StatusInput = z.infer<typeof statusSchema>;
+export type CreateMessageInput = z.infer<typeof createMessageSchema>;

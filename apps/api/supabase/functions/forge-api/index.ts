@@ -740,6 +740,56 @@ async function assertProviderOwnsOrder(order: JsonObject, userId: string): Promi
   }
 }
 
+async function assertOrderParticipant(
+  order: JsonObject,
+  userId: string,
+): Promise<'CUSTOMER' | 'PROVIDER'> {
+  if (order.user_id === userId) return 'CUSTOMER';
+  await assertProviderOwnsOrder(order, userId);
+  return 'PROVIDER';
+}
+
+function messageForClient(row: JsonObject, customerId: string | null): JsonObject {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    senderId: row.sender_id,
+    senderRole: row.sender_id === customerId ? 'CUSTOMER' : 'PROVIDER',
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
+async function listMessagesForOrder(userId: string, orderId: string): Promise<JsonObject[]> {
+  const order = await loadOrder(orderId);
+  await assertOrderParticipant(order, userId);
+  const { data, error } = await db
+    .from('order_messages')
+    .select('id, order_id, sender_id, body, created_at')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+  if (error) fail(500, 'MESSAGES_FETCH_FAILED', 'Could not load messages');
+  return ((data ?? []) as JsonObject[]).map((row) =>
+    messageForClient(row, order.user_id ? String(order.user_id) : null),
+  );
+}
+
+async function createMessageForOrder(
+  userId: string,
+  orderId: string,
+  body: string,
+): Promise<JsonObject> {
+  const order = await loadOrder(orderId);
+  await assertOrderParticipant(order, userId);
+  const { data, error } = await db
+    .from('order_messages')
+    .insert({ order_id: orderId, sender_id: userId, body })
+    .select('id, order_id, sender_id, body, created_at')
+    .single();
+  if (error || !data) fail(500, 'MESSAGE_CREATE_FAILED', 'Could not send the message');
+  return messageForClient(data as JsonObject, order.user_id ? String(order.user_id) : null);
+}
+
 function configuredPrinterRate(printer: JsonObject, material: string): number {
   const nested = Array.isArray(printer.printer_materials)
     ? (printer.printer_materials as JsonObject[])
@@ -898,7 +948,7 @@ async function orderWithAddressPrivacy(row: JsonObject): Promise<JsonObject> {
       ? ((printers as JsonObject[])[0] ?? null)
       : null;
   if (!printer || !printer.provider_id) return row;
-  const [providerResult, privateResult] = await Promise.all([
+  const [providerResult, privateResult, customerResult] = await Promise.all([
     db
       .from('providers')
       .select('id, type, display_name, pickup_area, pickup_address')
@@ -906,12 +956,20 @@ async function orderWithAddressPrivacy(row: JsonObject): Promise<JsonObject> {
       .maybeSingle(),
     db
       .from('provider_private')
-      .select('exact_address')
+      .select('exact_address, contact_phone')
       .eq('provider_id', printer.provider_id)
       .maybeSingle(),
+    row.user_id
+      ? db
+          .from('profiles')
+          .select('id, full_name, phone')
+          .eq('id', String(row.user_id))
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
   const provider = providerResult.data as JsonObject | null;
   if (!provider) return row;
+  const customer = customerResult.data as JsonObject | null;
   const status = String(row.status ?? '');
   const pickupAddress =
     provider.type === 'LAB'
@@ -923,12 +981,22 @@ async function orderWithAddressPrivacy(row: JsonObject): Promise<JsonObject> {
         : null;
   return {
     ...row,
+    ...(customer
+      ? {
+          customer: {
+            id: customer.id,
+            fullName: customer.full_name ?? null,
+            phone: customer.phone ?? null,
+          },
+        }
+      : {}),
     provider: {
       id: provider.id,
       type: provider.type,
       displayName: provider.display_name,
       pickupArea: provider.pickup_area,
       pickupAddress,
+      phone: (privateResult.data as JsonObject | null)?.contact_phone ?? null,
     },
   };
 }
@@ -1418,6 +1486,23 @@ async function route(request: Request): Promise<Response> {
           typeof body.notes === 'string' && body.notes ? body.notes : `Status updated to ${status}`,
         ),
       });
+    }
+
+    const messagesMatch = /^\/orders\/([^/]+)\/messages$/.exec(path);
+    if (method === 'GET' && messagesMatch) {
+      const messages = await listMessagesForOrder(user.id, decodeURIComponent(messagesMatch[1]));
+      return json({ messages });
+    }
+    if (method === 'POST' && messagesMatch) {
+      const body = await bodyOf(request);
+      const text = requireString(body.body, 'body').trim();
+      if (text.length > 2000) fail(400, 'VALIDATION_ERROR', 'Message is too long');
+      return json(
+        {
+          message: await createMessageForOrder(user.id, decodeURIComponent(messagesMatch[1]), text),
+        },
+        201,
+      );
     }
 
     const orderMatch = /^\/orders\/([^/]+)$/.exec(path);

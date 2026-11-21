@@ -1,3 +1,4 @@
+import type { OrderCustomerContact, OrderMessage, OrderMessageRole } from '@forge/types';
 import { supabaseAdmin } from '../../config/supabase';
 import { AppError } from '../../middleware/error';
 import { estimatePrice, MATERIAL_RATES } from '../pricing/pricing.service';
@@ -8,6 +9,7 @@ import {
   PROVIDER_STATUS_UPDATES,
   STATUS_TRANSITIONS,
   type Material,
+  type OrderMessageRow,
   type OrderRow,
   type OrderStatus,
   type OrderWithRelations,
@@ -135,10 +137,14 @@ async function getProviderById(providerId: string): Promise<ProviderForOrder | n
 
   const { data: privateRow } = await supabaseAdmin
     .from('provider_private')
-    .select('exact_address')
+    .select('exact_address, contact_phone')
     .eq('provider_id', providerId)
     .maybeSingle();
-  return { ...provider, exact_address: (privateRow?.exact_address as string | null) ?? null };
+  return {
+    ...provider,
+    exact_address: (privateRow?.exact_address as string | null) ?? null,
+    contact_phone: (privateRow?.contact_phone as string | null) ?? null,
+  };
 }
 
 async function getProviderForPrinter(printerId: string): Promise<ProviderForOrder | null> {
@@ -205,17 +211,37 @@ async function selectPrinter(
   return { provider: providerFields as ProviderForOrder, printer };
 }
 
-function formatOrder(
+async function getCustomerContact(userId: string | null): Promise<OrderCustomerContact | null> {
+  if (!userId) return null;
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, full_name, phone')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw new AppError(500, 'PROFILE_FETCH_FAILED', 'Could not load the customer');
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    fullName: (data.full_name as string | null) ?? null,
+    phone: (data.phone as string | null) ?? null,
+  };
+}
+
+async function formatOrder(
   order: OrderRow,
   provider: ProviderForOrder | null,
   events?: OrderWithRelations['order_status_events'],
-): OrderWithRelations {
+): Promise<OrderWithRelations> {
   const result: OrderWithRelations = {
     ...(order as OrderWithRelations),
     modelId: order.model_id,
     price_snapshot: Number(order.price_snapshot),
     progress: Number(order.progress),
   };
+
+  const customer = await getCustomerContact(order.user_id);
+  if (customer) result.customer = customer;
 
   if (provider) {
     result.provider = {
@@ -229,6 +255,7 @@ function formatOrder(
         provider.exact_address,
         provider.pickup_address,
       ),
+      phone: provider.contact_phone ?? null,
     };
   }
 
@@ -400,12 +427,14 @@ export async function listProviderOrders(userId: string): Promise<OrderWithRelat
   if (error) throw new AppError(500, 'ORDER_FETCH_FAILED', 'Could not load orders');
 
   const providerRow = await getProviderById(provider.id as string);
-  return (data ?? []).map((row) => {
-    const order = row as OrderRow & {
-      order_status_events: OrderWithRelations['order_status_events'];
-    };
-    return formatOrder(projectDemoOrder(order), providerRow, order.order_status_events);
-  });
+  return Promise.all(
+    (data ?? []).map((row) => {
+      const order = row as OrderRow & {
+        order_status_events: OrderWithRelations['order_status_events'];
+      };
+      return formatOrder(projectDemoOrder(order), providerRow, order.order_status_events);
+    }),
+  );
 }
 
 export async function getOrder(userId: string, orderId: string): Promise<OrderWithRelations> {
@@ -552,4 +581,58 @@ export async function startDemoPrint(userId: string, orderId: string): Promise<O
   );
 
   return loadOrder(orderId);
+}
+
+async function assertOrderParticipant(
+  order: OrderWithRelations,
+  userId: string,
+): Promise<OrderMessageRole> {
+  if (order.user_id === userId) return 'CUSTOMER';
+  await assertProviderOwnsOrder(order, userId);
+  return 'PROVIDER';
+}
+
+function toOrderMessage(row: OrderMessageRow, customerId: string | null): OrderMessage {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    senderId: row.sender_id,
+    senderRole: row.sender_id === customerId ? 'CUSTOMER' : 'PROVIDER',
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
+export async function listOrderMessages(userId: string, orderId: string): Promise<OrderMessage[]> {
+  const order = await loadOrder(orderId);
+  await assertOrderParticipant(order, userId);
+
+  const { data, error } = await supabaseAdmin
+    .from('order_messages')
+    .select('id, order_id, sender_id, body, created_at')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new AppError(500, 'MESSAGES_FETCH_FAILED', 'Could not load messages');
+  return ((data ?? []) as OrderMessageRow[]).map((row) => toOrderMessage(row, order.user_id));
+}
+
+export async function createOrderMessage(
+  userId: string,
+  orderId: string,
+  body: string,
+): Promise<OrderMessage> {
+  const order = await loadOrder(orderId);
+  await assertOrderParticipant(order, userId);
+
+  const { data, error } = await supabaseAdmin
+    .from('order_messages')
+    .insert({ order_id: orderId, sender_id: userId, body })
+    .select('id, order_id, sender_id, body, created_at')
+    .single();
+
+  if (error || !data) {
+    throw new AppError(500, 'MESSAGE_CREATE_FAILED', 'Could not send the message');
+  }
+  return toOrderMessage(data as OrderMessageRow, order.user_id);
 }

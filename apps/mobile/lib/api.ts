@@ -3,6 +3,8 @@ import type {
   CreateOrderInput,
   Material,
   Order,
+  OrderMessage,
+  OrderMessageRole,
   Printer,
   Profile,
   ProfileStats,
@@ -149,6 +151,7 @@ type UploadSession = {
 const mockUploads = new Map<string, UploadSession>();
 const mockModels = new Map<string, ModelDetails>();
 const mockOrders = new Map<string, MarketplaceOrder>();
+const mockMessages = new Map<string, OrderMessage[]>();
 const demoTimers = new Map<string, ReturnType<typeof setInterval>>();
 let mockProvider: ProviderProfile | null = null;
 
@@ -158,7 +161,7 @@ const mockProfile: Profile = {
   email: "demo@forge.local",
   fullName: "Forge Maker",
   avatarUrl: null,
-  phone: null,
+  phone: "+66 81 234 5678",
   notifications: {
     email: true,
     push: true,
@@ -556,6 +559,42 @@ export const api = {
     return result.order;
   },
 
+  async getOrderMessages(id: string) {
+    if (USE_MOCK_API) return mockMessages.get(id) ?? [];
+    const result = await request<{ messages: OrderMessage[] }>(
+      `/orders/${encodeURIComponent(id)}/messages`,
+    );
+    return result.messages;
+  },
+
+  async sendOrderMessage(id: string, body: string, senderRole: OrderMessageRole = 'CUSTOMER') {
+    const text = body.trim();
+    if (!text) throw new ApiError("VALIDATION_ERROR", "Enter a message.", 400);
+    if (text.length > 2000) {
+      throw new ApiError("VALIDATION_ERROR", "Messages are limited to 2000 characters.", 400);
+    }
+    if (USE_MOCK_API) {
+      if (!mockOrders.has(id)) {
+        throw new ApiError("ORDER_NOT_FOUND", "Order not found.", 404);
+      }
+      const message: OrderMessage = {
+        id: mockId(),
+        orderId: id,
+        senderId: senderRole === 'PROVIDER' ? mockProvider?.id ?? 'mock-provider' : mockProfile.id,
+        senderRole,
+        body: text,
+        createdAt: new Date().toISOString(),
+      };
+      mockMessages.set(id, [...(mockMessages.get(id) ?? []), message]);
+      return message;
+    }
+    const result = await request<{ message: OrderMessage }>(
+      `/orders/${encodeURIComponent(id)}/messages`,
+      { method: "POST", body: { body: text } },
+    );
+    return result.message;
+  },
+
   async getMarketplaceProviderOrders() {
     if (USE_MOCK_API) {
       // There is only one provider profile in the in-memory demo. Showing all
@@ -829,8 +868,31 @@ export const api = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         printers: legacyPrinter(provider),
+        provider: {
+          id: provider.id,
+          type: "LAB",
+          displayName: provider.displayName,
+          pickupArea: mockProvider?.pickupArea ?? "Campus pickup area",
+          pickupAddress: "Main campus pickup point",
+          phone: mockProvider?.contactPhone ?? "+66 2 123 4567",
+        },
+        customer: {
+          id: mockProfile.id,
+          fullName: mockProfile.fullName,
+          phone: mockProfile.phone,
+        },
       };
       mockOrders.set(order.id, order);
+      mockMessages.set(order.id, [
+        {
+          id: mockId(),
+          orderId: order.id,
+          senderId: provider.id,
+          senderRole: "PROVIDER",
+          body: `Hi! I have your order ${order.order_number}. Message me here if you need anything before pickup.`,
+          createdAt: order.created_at,
+        },
+      ]);
       return startMockDemoPrint(order.id);
     }
     const result = await request<{ order: MarketplaceOrder }>("/orders", {
