@@ -39,7 +39,13 @@
           "backgroundColor": "#FAFAF9"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Forge uses your location to set your printing service pickup point."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

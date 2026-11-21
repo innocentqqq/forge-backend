@@ -24,6 +24,7 @@ import {
   TextField,
   Toggle,
 } from '../components/ui';
+import { LocationPicker, parseCoordinate } from '../components/location-picker';
 import { api, ApiError } from '../lib/api';
 import { fonts } from '../lib/fonts';
 import {
@@ -33,6 +34,7 @@ import {
   draftToInput,
   evaluateSetup,
   PICKUP_DAYS,
+  privatePointPatch,
   profileToDraft,
   selectedMaterials,
   type ProviderDraft,
@@ -412,6 +414,28 @@ function BasicsStep({ draft, patch }: StepProps) {
           placeholder="Meet at the front desk; bring your order number."
           multiline
         />
+
+        {draft.type === 'INDIVIDUAL' ? (
+          <LocationPicker
+            title="Choose private pickup point on map"
+            hint="Drop the pin at your exact pickup spot. Customers see an approximate point until they book."
+            markerTone="private"
+            latitude={parseCoordinate(draft.exactLatitude)}
+            longitude={parseCoordinate(draft.exactLongitude)}
+            onSelect={({ latitude, longitude }) => patch(privatePointPatch(latitude, longitude))}
+          />
+        ) : (
+          <LocationPicker
+            title="Choose public pickup point on map"
+            hint="Drop the pin where customers should meet you. This point is shown before they order."
+            latitude={parseCoordinate(draft.latitude)}
+            longitude={parseCoordinate(draft.longitude)}
+            onSelect={({ latitude, longitude }) =>
+              patch({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) })
+            }
+          />
+        )}
+
         <View style={styles.locationRow}>
           <View style={styles.flex}>
             <FilledField

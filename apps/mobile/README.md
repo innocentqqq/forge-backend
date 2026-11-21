@@ -60,6 +60,18 @@ while signing in, the API removes that new account and asks the user to sign up 
 The sign-up screen accepts the new account. The app calls the deployed
 `POST /auth/oauth-signin-check` endpoint through the `forge-api` Edge Function.
 
+### Provider map picker
+
+Provider setup uses `react-native-maps` and `expo-location` for the **Pickup location** step.
+Drag the pin, tap the map, or use **Use my current location**. The picker writes the public
+point for labs and the private exact point for individual makers; individual public search
+points stay approximately 500 m away from the exact point.
+
+The map works in Expo Go and iOS builds without extra keys. Android development builds and
+store builds need a Google Maps SDK for Android API key added to the `react-native-maps`
+config plugin in `app.json`; see the Expo `react-native-maps` docs for the key restrictions.
+Web keeps the manual latitude/longitude fields as a fallback.
+
 ## 2. Deploy the Supabase API
 
 ```bash

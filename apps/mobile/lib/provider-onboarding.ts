@@ -268,6 +268,38 @@ function optionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+/**
+ * Mirrors the API's deterministic 500 m offset so editing an individual's pin
+ * also moves the public search point. The API recomputes this on create; this
+ * helper keeps later profile edits consistent.
+ */
+export function privatePointPatch(
+  latitude: number,
+  longitude: number,
+): Pick<ProviderDraft, 'exactLatitude' | 'exactLongitude' | 'latitude' | 'longitude'> {
+  let hash = 2166136261;
+  const seed = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  const angle = ((hash >>> 0) / 0xffffffff) * 2 * Math.PI;
+  const kmPerDegreeLat = 111.32;
+  const kmPerDegreeLng = 111.32 * Math.max(0.2, Math.cos((latitude * Math.PI) / 180));
+  const publicLat = Math.max(
+    -90,
+    Math.min(90, latitude + (0.5 * Math.sin(angle)) / kmPerDegreeLat),
+  );
+  const publicLng = longitude + (0.5 * Math.cos(angle)) / kmPerDegreeLng;
+
+  return {
+    exactLatitude: latitude.toFixed(6),
+    exactLongitude: longitude.toFixed(6),
+    latitude: publicLat.toFixed(6),
+    longitude: publicLng.toFixed(6),
+  };
+}
+
 export function draftToInput(draft: ProviderDraft): ProviderSetupInput {
   const hours = PICKUP_DAYS.reduce<PickupHours>((acc, day) => {
     acc[day] = draft.hours[day] ?? null;
