@@ -40,6 +40,7 @@ export const icons = {
   chat: 'chatbubble-outline',
   card: 'card-outline',
   google: 'logo-google',
+  apple: 'logo-apple',
 } as const satisfies Record<string, IconName>;
 
 export function Icon({
