@@ -1,12 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  View,
-  type ListRenderItem,
-} from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { api } from '../lib/api';
 import { fonts } from '../lib/fonts';
 import type { OrderMessage, OrderMessageRole } from '../lib/types';
@@ -75,7 +69,7 @@ export function OrderMessages({
     }
   };
 
-  const renderMessage: ListRenderItem<OrderMessage> = ({ item }) => {
+  const renderMessage = (item: OrderMessage) => {
     const mine = item.senderRole === viewerRole;
     return (
       <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
@@ -100,14 +94,11 @@ export function OrderMessages({
           message="Send a note about the print, pickup time, or anything the other party should know."
         />
       ) : (
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.list}
-          onContentSizeChange={() => undefined}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={styles.list}>
+          {messages.map((item) => (
+            <React.Fragment key={item.id}>{renderMessage(item)}</React.Fragment>
+          ))}
+        </View>
       )}
 
       <View style={styles.composer}>
