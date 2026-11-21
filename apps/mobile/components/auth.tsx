@@ -14,10 +14,11 @@ import { Icon, icons, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
 import { colors, radius } from '../lib/theme';
 
-export type OAuthProvider = 'google';
+export type OAuthProvider = 'google' | 'apple';
 
 const PROVIDERS: Record<OAuthProvider, { label: string; icon: IconName; iconColor: string }> = {
   google: { label: 'Continue with Google', icon: icons.google, iconColor: '#4285F4' },
+  apple: { label: 'Continue with Apple', icon: icons.apple, iconColor: '#000000' },
 };
 
 /** Social sign-in buttons + "or" divider, placed above the email form. */

@@ -21,11 +21,11 @@ import {
 } from './oauth';
 import { supabase, supabaseKey, supabaseUrl } from './supabase';
 
-export type OAuthProvider = 'google';
+export type OAuthProvider = 'google' | 'apple';
 
 type AuthDestination = '/' | '/auth/success';
 
-const PROVIDER_LABELS: Record<OAuthProvider, string> = { google: 'Google' };
+const PROVIDER_LABELS: Record<OAuthProvider, string> = { google: 'Google', apple: 'Apple' };
 
 /**
  * Supabase returns a JSON error page (rather than a redirect) when a provider
