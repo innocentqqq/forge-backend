@@ -10,12 +10,16 @@ import {
 } from "react-native";
 import {
   AppHeader,
+  Badge,
   Banner,
   Button,
   ErrorView,
+  EstimateRow,
   LoadingView,
+  ModeBadge,
   ProgressBar,
   Screen,
+  SpecLabel,
   tabularFigures,
 } from "../../components/ui";
 import { api } from "../../lib/api";
@@ -59,6 +63,12 @@ export default function ProviderOrderScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [demoStarted, setDemoStarted] = useState(false);
+
+  const quote = Number(liveOrder?.price_snapshot ?? params.price ?? 0) || 0;
+  const materialCost = Math.round(quote * 0.33);
+  const machineCost = Math.round(quote * 0.24);
+  const labourCost = Math.round(quote * 0.17);
+  const serviceCost = Math.max(0, quote - materialCost - machineCost - labourCost);
 
   if (!params.id) {
     return (
@@ -171,8 +181,13 @@ export default function ProviderOrderScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.pageTitle}>Update order</Text>
-        <Text style={styles.subtitle}>Order #{params.orderNumber ?? "—"}</Text>
+        <View style={styles.modeRow}>
+          <ModeBadge mode="provider" />
+        </View>
+        <Text style={styles.pageTitle}>Active jobs</Text>
+        <Text style={styles.subtitle}>
+          Order #{params.orderNumber ?? "—"} · {STATUS_LABELS[status] ?? status} · {progress}%
+        </Text>
 
         <View style={styles.card}>
           <View style={styles.summaryTop}>
@@ -195,6 +210,34 @@ export default function ProviderOrderScreen() {
           <Text style={styles.meta}>
             Pickup · {params.pickup ?? "Pickup details in order"}
           </Text>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.quotationHead}>
+            <SpecLabel>CREATE QUOTATION</SpecLabel>
+            <Badge label="ESTIMATE" tone="warning" />
+          </View>
+          <Text style={styles.quotationSub}>
+            Material {formatMoney(materialCost)} · Machine {formatMoney(machineCost)} · Labour{" "}
+            {formatMoney(labourCost)}
+          </Text>
+          <EstimateRow label="Material" value={formatMoney(materialCost)} />
+          <EstimateRow label="Machine time" value={formatMoney(machineCost)} />
+          <EstimateRow label="Labour" value={formatMoney(labourCost)} />
+          <EstimateRow label="Service & margin" value={formatMoney(serviceCost)} />
+          <View style={styles.divider} />
+          <EstimateRow label="FINAL QUOTATION" value={formatMoney(quote)} emphasis />
+          <Text style={styles.quotationNote}>
+            The customer sees this as an estimate until you confirm it in messages.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send quotation to customer"
+            onPress={() => router.push(`/messages/${params.id}?role=provider`)}
+            hitSlop={12}
+          >
+            <Text style={styles.link}>Send quotation</Text>
+          </Pressable>
         </View>
 
         <View style={styles.statusHeader}>
@@ -344,7 +387,7 @@ export default function ProviderOrderScreen() {
           }
           hitSlop={12}
         >
-          <Text style={styles.link}>Contact &amp; messages</Text>
+          <Text style={styles.link}>Send customer update</Text>
         </Pressable>
         <Text style={styles.footnote}>
           Status changes are shared with the customer in real time.
@@ -356,14 +399,15 @@ export default function ProviderOrderScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingTop: 8,
     paddingBottom: 32,
     gap: 16,
   },
+  modeRow: { alignItems: 'flex-end' },
   pageTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 24,
+    fontFamily: fonts.displayBold,
+    fontSize: 26,
     lineHeight: 29,
     color: colors.text,
   },
@@ -422,6 +466,23 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 6 },
+  quotationHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  quotationSub: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 16,
+    color: colors.muted,
+  },
+  quotationNote: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+  },
 
   statusHeader: {
     flexDirection: "row",

@@ -23,13 +23,14 @@ function RootNavigator() {
     // in CI too, where the route types have not been generated yet.
     const path: string[] = segments;
     const inAuthGroup = path[0] === '(auth)';
+    const isLaunchRoute = path[0] === 'splash' || path[0] === 'onboarding';
     const isPublicAuthRoute =
       path[0] === 'auth' &&
       (path[1] === 'callback' || path[1] === 'reset-password' || path[1] === 'success');
 
-    if (!session && !inAuthGroup && !isPublicAuthRoute) {
-      router.replace('/sign-in');
-    } else if (session && inAuthGroup) {
+    if (!session && !inAuthGroup && !isPublicAuthRoute && !isLaunchRoute) {
+      router.replace('/splash' as never);
+    } else if (session && (inAuthGroup || isLaunchRoute)) {
       router.replace(consumeNextRoute() ?? '/');
     }
   }, [session, loading, holdRedirect, segments, router, consumeNextRoute]);
@@ -44,11 +45,16 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Screen name="splash" options={{ headerShown: false, gestureEnabled: false }} />
+      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen name="nearby" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       <Stack.Screen name="auth/success" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="provider" options={{ headerShown: false }} />
+      <Stack.Screen name="provider-earnings" options={{ headerShown: false }} />
+      <Stack.Screen name="provider-profile" options={{ headerShown: false }} />
       <Stack.Screen name="provider-shop/[section]" options={{ headerShown: false }} />
       <Stack.Screen name="printer/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="provider-onboarding" options={{ headerShown: false }} />
@@ -91,7 +97,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <RootNavigator />
       </AuthProvider>
     </SafeAreaProvider>

@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Radio, Screen, SectionHero, tabularFigures } from '../components/ui';
+import { AppHeader, Button, EstimateRow, ModeBadge, Radio, Screen, SpecLabel, tabularFigures } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { api, estimatePrice } from '../lib/api';
 import { formatDate, formatMoney } from '../lib/format';
@@ -91,11 +91,16 @@ export default function CheckoutScreen() {
     <Screen>
       <AppHeader back section="checkout" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <SectionHero
-          section="checkout"
-          title="Checkout"
-          subtitle="Review your print and confirm payment."
-        />
+        <View style={styles.modeRow}>
+          <ModeBadge mode="customer" />
+        </View>
+        <View style={styles.intro}>
+          <SpecLabel>STEP 04 · REVIEW</SpecLabel>
+          <Text style={styles.title}>Review request</Text>
+          <Text style={styles.subtitle}>
+            {params.fileName || 'Lamp Shade v4.stl'} · {formatMoney(printCost)} estimate
+          </Text>
+        </View>
 
         <View style={styles.card}>
           <View style={styles.fileRow}>
@@ -115,9 +120,9 @@ export default function CheckoutScreen() {
         </View>
 
         <View style={styles.priceCard}>
-          <Row label="Print cost" value={formatMoney(printCost)} />
-          <Row label="Service fee" value={formatMoney(SERVICE_FEE)} />
-          <Row label="Total" value={formatMoney(total)} emphasis />
+          <EstimateRow label="Print cost" value={formatMoney(printCost)} />
+          <EstimateRow label="Service fee" value={formatMoney(SERVICE_FEE)} />
+          <EstimateRow label="Total estimate" value={formatMoney(total)} emphasis />
         </View>
 
         <Text style={styles.section}>Payment</Text>
@@ -152,7 +157,7 @@ export default function CheckoutScreen() {
 
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
-        <Button title="Place order" loading={busy} onPress={() => void place()} />
+        <Button title="Place Print Request" loading={busy} onPress={() => void place()} />
         <Text style={styles.terms}>By placing your order you agree to Forge’s Terms of Service.</Text>
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -170,8 +175,12 @@ function Row({ label, value, emphasis = false }: { label: string; value: string;
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
-  section: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink },
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, gap: 16 },
+  modeRow: { alignItems: 'flex-end' },
+  intro: { gap: 6 },
+  title: { fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
+  subtitle: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 17, color: colors.muted },
+  section: { fontFamily: fonts.display, fontSize: 18, lineHeight: 23, color: palette.ink },
 
   card: {
     backgroundColor: palette.surface,

@@ -30,9 +30,11 @@ import {
 } from '../lib/theme';
 
 const logo = require('../assets/forge-logo.png');
+const avatar = require('../assets/figma-avatar.png');
 
-/** Keeps prices, counters and progress values from shifting as digits change. */
+/** Prices, counters and measurements use the mono face from the handoff. */
 export const tabularFigures: TextStyle = {
+  fontFamily: fonts.mono,
   fontVariant: ['tabular-nums'],
 };
 
@@ -563,9 +565,9 @@ const dotColors: Record<StatusTone, string> = {
 
 export function StatusPill({ label, tone = 'active' }: { label: string; tone?: StatusTone }) {
   return (
-    <View style={styles.status}>
+    <View style={[styles.status, tone === 'done' && styles.statusSuccess]}>
       <View style={[styles.statusDot, { backgroundColor: dotColors[tone] }]} />
-      <Text style={styles.statusText}>{label}</Text>
+      <Text style={[styles.statusText, tone === 'done' && styles.statusTextSuccess]}>{label}</Text>
     </View>
   );
 }
@@ -574,7 +576,7 @@ type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
 const badgeStyles: Record<BadgeTone, ViewStyle> = {
   neutral: { backgroundColor: colors.surfaceSubtle },
-  success: { backgroundColor: colors.surfaceSubtle },
+  success: { backgroundColor: colors.successSurface },
   warning: { backgroundColor: colors.surfaceSubtle },
   danger: { backgroundColor: colors.dangerSoft },
   info: { backgroundColor: colors.surfaceSubtle },
@@ -582,7 +584,7 @@ const badgeStyles: Record<BadgeTone, ViewStyle> = {
 
 const badgeTextColors: Record<BadgeTone, string> = {
   neutral: colors.muted,
-  success: colors.link,
+  success: colors.success,
   warning: colors.muted,
   danger: colors.danger,
   info: colors.link,
@@ -678,6 +680,141 @@ export function SettingRow({
   );
 }
 
+/* ------------------------------------------------------- Figma primitives */
+
+/** Small uppercase mode marker shown on every prototype screen. */
+export function ModeBadge({ mode }: { mode: 'customer' | 'provider' }) {
+  return (
+    <View style={styles.modeBadge}>
+      <Text style={styles.modeBadgeText}>
+        {mode === 'customer' ? 'CUSTOMER MODE' : 'PROVIDER MODE'}
+      </Text>
+    </View>
+  );
+}
+
+/** Uppercase mono label used for specifications and section eyebrows. */
+export function SpecLabel({ children }: { children: React.ReactNode }) {
+  return <Text style={styles.specLabel}>{children}</Text>;
+}
+
+/** Mono text for dimensions, prices, rates and order numbers. */
+export function MonoText({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: object;
+}) {
+  return <Text style={[styles.monoText, style]}>{children}</Text>;
+}
+
+/** Reusable estimate / summary row. Values stay aligned via tabular figures. */
+export function EstimateRow({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <View style={styles.estimateRow}>
+      <Text style={emphasis ? styles.estimateLabelStrong : styles.estimateLabel}>
+        {label}
+      </Text>
+      <Text style={emphasis ? styles.estimateValueStrong : styles.estimateValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** Timeline step used by order tracking and provider job screens. */
+export function TimelineItem({
+  title,
+  detail,
+  state = 'upcoming',
+  last = false,
+}: {
+  title: string;
+  detail?: string;
+  state?: 'done' | 'current' | 'upcoming';
+  last?: boolean;
+}) {
+  const color =
+    state === 'done' ? colors.success : state === 'current' ? colors.accent : colors.border;
+  return (
+    <View style={styles.timelineItem}>
+      <View style={styles.timelineRail}>
+        <View style={[styles.timelineDot, { backgroundColor: color }]}>
+          {state === 'done' ? <Icon name={icons.check} size={12} color={colors.bg} /> : null}
+        </View>
+        {!last ? <View style={[styles.timelineLine, state === 'done' && styles.timelineLineDone]} /> : null}
+      </View>
+      <View style={styles.timelineCopy}>
+        <Text style={[styles.timelineTitle, state !== 'upcoming' && styles.timelineTitleActive]}>
+          {title}
+        </Text>
+        {detail ? <Text style={styles.timelineDetail}>{detail}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+export type BottomNavKey = 'discover' | 'nearby' | 'upload' | 'orders' | 'profile';
+
+const bottomNavItems: { key: BottomNavKey; label: string; icon: IconName }[] = [
+  { key: 'discover', label: 'Discover', icon: icons.home },
+  { key: 'nearby', label: 'Nearby', icon: icons.search },
+  { key: 'upload', label: 'Upload', icon: icons.plus },
+  { key: 'orders', label: 'Orders', icon: icons.orders },
+  { key: 'profile', label: 'Profile', icon: icons.profile },
+];
+
+/** Five-slot navigation from the Figma customer frames. */
+export function BottomNavigation({
+  active,
+  onPress,
+}: {
+  active: BottomNavKey;
+  onPress: (key: BottomNavKey) => void;
+}) {
+  return (
+    <View style={styles.bottomNav}>
+      {bottomNavItems.map((item) => {
+        const focused = item.key === active;
+        return (
+          <Pressable
+            key={item.key}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected: focused }}
+            onPress={() => onPress(item.key)}
+            style={styles.bottomNavItem}
+          >
+            <Icon name={item.icon} size={20} color={focused ? colors.accent : colors.muted} />
+            <Text style={[styles.bottomNavLabel, focused && styles.bottomNavLabelActive]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Avatar built on the Figma orange circle asset, with initials overlaid. */
+export function ForgeAvatar({ initials, size = 58 }: { initials: string; size?: number }) {
+  return (
+    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Image source={avatar} style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]} resizeMode="cover" />
+      <Text style={[styles.avatarInitials, { fontSize: Math.max(14, size * 0.34) }]}>{initials}</Text>
+    </View>
+  );
+}
+
 export function Banner({ message, tone = 'danger' }: { message: string; tone?: BadgeTone }) {
   return (
     <View
@@ -762,10 +899,10 @@ const styles = StyleSheet.create({
   brand: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
   back: { width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
 
-  heroTitle: { fontFamily: fonts.bold, fontSize: 32, lineHeight: 38.4, color: colors.text },
-  pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  sectionTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text },
-  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  heroTitle: { fontFamily: fonts.displayBold, fontSize: 32, lineHeight: 38, color: colors.text },
+  pageTitle: { fontFamily: fonts.display, fontSize: 24, lineHeight: 30, color: colors.text },
+  sectionTitle: { fontFamily: fonts.display, fontSize: 17, lineHeight: 22, color: colors.text },
+  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 21, color: colors.text },
   subtitle: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.muted },
   body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.text },
   muted: { color: colors.muted },
@@ -867,6 +1004,8 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: radius.pill },
   statusText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.text },
+  statusSuccess: { backgroundColor: colors.successSurface },
+  statusTextSuccess: { color: colors.success },
 
   badge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
   badgeText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16.8, ...tabularFigures },
@@ -890,6 +1029,55 @@ const styles = StyleSheet.create({
 
   banner: { borderRadius: radius.md, padding: 12 },
   bannerText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2 },
+
+  modeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  modeBadgeText: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.8, color: colors.accent },
+  specLabel: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.8,
+    color: colors.muted,
+  },
+  monoText: { fontFamily: fonts.mono, fontSize: 13, lineHeight: 18, color: colors.text },
+  estimateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  estimateLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
+  estimateValue: { fontFamily: fonts.mono, fontSize: 13, lineHeight: 18, color: colors.text },
+  estimateLabelStrong: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text },
+  estimateValueStrong: { fontFamily: fonts.monoBold, fontSize: 18, lineHeight: 23, color: colors.accent },
+
+  timelineItem: { flexDirection: 'row', gap: 12 },
+  timelineRail: { width: 20, alignItems: 'center' },
+  timelineDot: { width: 18, height: 18, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  timelineLine: { width: 2, flex: 1, minHeight: 22, backgroundColor: colors.border },
+  timelineLineDone: { backgroundColor: colors.success },
+  timelineCopy: { flex: 1, paddingBottom: 14, gap: 2 },
+  timelineTitle: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 19, color: colors.muted },
+  timelineTitleActive: { fontFamily: fonts.semibold, color: colors.text },
+  timelineDetail: { fontFamily: fonts.mono, fontSize: 11, lineHeight: 15, color: colors.accent },
+
+  bottomNav: {
+    flexDirection: 'row',
+    minHeight: 58,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 6,
+  },
+  bottomNavItem: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 56 },
+  bottomNavLabel: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 13, color: colors.muted },
+  bottomNavLabelActive: { fontFamily: fonts.semibold, color: colors.accent },
+
+  avatar: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarImage: { position: 'absolute', top: 0, left: 0 },
+  avatarInitials: { fontFamily: fonts.displayBold, color: colors.bg },
 
   sectionHero: {
     flexDirection: 'row',

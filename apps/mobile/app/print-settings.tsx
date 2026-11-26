@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Screen, SectionHero, tabularFigures } from '../components/ui';
+import { AppHeader, Button, ModeBadge, Screen, SpecLabel, tabularFigures } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { ModelViewer } from '../components/ModelViewer';
 import { api } from '../lib/api';
@@ -97,11 +97,14 @@ export default function PrintSettingsScreen() {
         showsVerticalScrollIndicator={false}
         scrollEnabled={!viewerInteracting}
       >
-        <SectionHero
-          section="configure"
-          title="Print settings"
-          subtitle="Choose material, quality, color, and quantity."
-        />
+        <View style={styles.modeRow}>
+          <ModeBadge mode="customer" />
+        </View>
+        <View style={styles.intro}>
+          <SpecLabel>STEP 02 · CONFIGURE</SpecLabel>
+          <Text style={styles.title}>Configure print</Text>
+          <Text style={styles.subtitle}>PLA · Matte Orange · Standard · ×{quantity}</Text>
+        </View>
 
         {preview ? (
           <View style={styles.viewer}>
@@ -202,10 +205,11 @@ export default function PrintSettingsScreen() {
         </View>
 
         <View style={styles.priceCard}>
-          <Text style={styles.priceLabel}>Price estimate</Text>
+          <SpecLabel>ESTIMATE</SpecLabel>
           <Text style={styles.priceValue}>
             {loadingEstimate ? 'Calculating…' : estimate === null ? '—' : formatMoney(estimate)}
           </Text>
+          <Text style={styles.estimateNote}>Final price is confirmed by the provider.</Text>
           {estimateError ? <Text accessibilityRole="alert" style={styles.error}>{estimateError}</Text> : null}
         </View>
 
@@ -240,6 +244,11 @@ export default function PrintSettingsScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24, gap: 12 },
+  modeRow: { alignItems: 'flex-end' },
+  intro: { gap: 6 },
+  title: { fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
+  subtitle: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 17, color: colors.muted },
+  estimateNote: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, color: colors.muted },
   pressed: { opacity: 0.85 },
   viewer: { height: 280, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.bg },
   info: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
@@ -276,7 +285,7 @@ const styles = StyleSheet.create({
 
   priceCard: { backgroundColor: palette.soft, borderWidth: 1, borderColor: palette.border, borderRadius: radius.sm, padding: 12, gap: 6, minHeight: 116 },
   priceLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink },
-  priceValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.accent, ...tabularFigures },
+  priceValue: { fontFamily: fonts.monoBold, fontSize: 28, lineHeight: 34, color: palette.accent, ...tabularFigures },
 
   bottomBar: {
     position: 'absolute',

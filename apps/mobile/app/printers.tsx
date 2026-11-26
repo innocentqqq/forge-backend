@@ -15,8 +15,9 @@ import {
   EmptyView,
   ErrorView,
   LoadingView,
+  ModeBadge,
   Screen,
-  SectionHero,
+  SpecLabel,
 } from "../components/ui";
 import { ProviderCard } from "../components/provider-card";
 import { api, USE_MOCK_API } from "../lib/api";
@@ -157,12 +158,15 @@ export default function ProvidersScreen() {
               />
             }
           >
-            <SectionHero
-              section="providers"
-              title="Choose a provider"
-              subtitle="Compare price, distance, and availability for your model."
-              action={<Badge label={`${providers.length} found`} accent={palette.accent} />}
-            />
+            <View style={styles.modeRow}>
+              <ModeBadge mode="customer" />
+            </View>
+            <View style={styles.intro}>
+              <SpecLabel>STEP 03 · COMPARE</SpecLabel>
+              <Text style={styles.title}>Compare providers</Text>
+              <Text style={styles.subtitle}>Sort by lowest price, nearest, or fastest</Text>
+            </View>
+            <Badge label={`${providers.length} found`} tone="success" />
             <View style={styles.sortRow}>
               {SORTS.map((option) => (
                 <Pressable
@@ -261,14 +265,18 @@ export default function ProvidersScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 24,
     gap: 12,
   },
+  modeRow: { alignItems: 'flex-end' },
+  intro: { gap: 6 },
+  title: { fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
+  subtitle: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 17, color: colors.muted },
   sortRow: { flexDirection: "row", gap: 8 },
   chip: {
     flex: 1,
-    minHeight: 36,
+    minHeight: 44,
     borderRadius: radius.sm,
     backgroundColor: palette.soft,
     borderWidth: 1,
@@ -278,7 +286,7 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: palette.accent, borderColor: palette.accent },
   chipText: { fontFamily: fonts.regular, fontSize: 13, color: palette.ink },
-  chipTextActive: { fontFamily: fonts.semibold, color: "#FFFFFF" },
+  chipTextActive: { fontFamily: fonts.semibold, color: colors.onAccent },
   filterCard: {
     padding: 12,
     borderRadius: radius.md,

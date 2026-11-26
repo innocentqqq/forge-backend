@@ -55,8 +55,8 @@ export default function SignUpScreen() {
 
   return (
     <AuthScreen
-      title="Create your account"
-      description="Join Forge to turn your 3D designs into real prints with trusted makers nearby."
+      title="Create your account."
+      description="Full name · email address · password · Google sign-in."
       footer={<AuthFooterLink prompt="Already have an account?" action="Log in" onPress={() => router.push('/sign-in')} />}
       terms="By creating an account, you agree to Forge’s Terms of Service and Privacy Policy."
     >
