@@ -322,6 +322,7 @@ function TypeStep({ draft, patch }: StepProps) {
           <Pressable
             key={option.type}
             accessibilityRole="radio"
+            accessibilityLabel={option.title}
             accessibilityState={{ selected }}
             onPress={() => patch({ type: option.type })}
             style={[styles.optionCard, selected && styles.optionCardSelected]}
@@ -592,6 +593,7 @@ function PrintersStep({ draft, patch }: StepProps) {
             <Toggle
               value={printer.isActive ?? true}
               onValueChange={(value) => updatePrinter(index, { isActive: value })}
+              accessibilityLabel={`Printer ${index + 1} available for orders`}
             />
           </View>
         </Card>
@@ -693,7 +695,11 @@ function AvailabilityStep({ draft, patch }: StepProps) {
             <Text style={styles.cardTitle}>Accepting orders</Text>
             <Text style={styles.cardDetail}>Turn this off to pause new jobs.</Text>
           </View>
-          <Toggle value={draft.isOpen} onValueChange={(value) => patch({ isOpen: value })} />
+          <Toggle
+            value={draft.isOpen}
+            onValueChange={(value) => patch({ isOpen: value })}
+            accessibilityLabel="Accepting orders"
+          />
         </View>
         <FilledField
           label="Turnaround (days)"
@@ -725,6 +731,7 @@ function AvailabilityStep({ draft, patch }: StepProps) {
                 <Text style={styles.dayLabel}>{DAY_LABELS[day]}</Text>
                 <Toggle
                   value={Boolean(range)}
+                  accessibilityLabel={`Open for pickup on ${DAY_LABELS[day]}`}
                   onValueChange={(enabled) =>
                     patch({
                       hours: {
@@ -846,6 +853,7 @@ function ReviewStep({
           <Pressable
             key={agreement.key}
             accessibilityRole="checkbox"
+            accessibilityLabel={agreement.title}
             accessibilityState={{ checked: draft.agreements[agreement.key] }}
             onPress={() => toggleAgreement(agreement.key)}
             style={styles.agreementRow}

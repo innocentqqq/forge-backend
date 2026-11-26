@@ -44,6 +44,19 @@ export const icons = {
   google: 'logo-google',
 } as const satisfies Record<string, IconName>;
 
+/** Filled counterparts used only for the active state of an icon label pair. */
+export const activeIcons = {
+  [icons.home]: 'home',
+  [icons.orders]: 'cube',
+  [icons.profile]: 'person',
+  [icons.briefcase]: 'briefcase',
+  [icons.settings]: 'settings',
+} as const satisfies Partial<Record<IconName, IconName>>;
+
+export function statefulIcon(name: IconName, active: boolean): IconName {
+  return active ? activeIcons[name as keyof typeof activeIcons] ?? name : name;
+}
+
 export function Icon({
   name,
   size = 20,

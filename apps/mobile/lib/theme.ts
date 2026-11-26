@@ -32,6 +32,8 @@ export const colors = {
   surfaceSubtle: '#F4F6FC',
   /** Links and secondary action labels. */
   link: brand.primary,
+  /** Text on filled accent surfaces. */
+  onAccent: brand.secondary,
   track: '#E2E5EF',
   danger: '#C43D4D',
   dangerSoft: '#FFF0F2',
@@ -151,6 +153,9 @@ export const spacing = {
   xl: 24,
   xxl: 32,
 } as const;
+
+/** Minimum touch target used by icon-only and compact controls. */
+export const touchTarget = 44;
 
 export const radius = {
   xs: 3,

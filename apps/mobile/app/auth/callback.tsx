@@ -81,7 +81,7 @@ export default function AuthCallbackScreen() {
           setError(
             routeError instanceof Error
               ? routeError.message
-              : 'Could not complete the sign-in. Please try again.',
+              : 'Sign-in did not complete. Try again.',
           );
           setFinished(true);
         }

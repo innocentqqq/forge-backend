@@ -12,6 +12,7 @@ import {
   AppHeader,
   Badge,
   Button,
+  EmptyView,
   ErrorView,
   LoadingView,
   Screen,
@@ -225,9 +226,10 @@ export default function ProvidersScreen() {
               />
             ))}
             {!loading && providers.length === 0 ? (
-              <Text style={styles.empty}>
-                No providers are available for this model and material.
-              </Text>
+              <EmptyView
+                title="No matching providers"
+                message="Try a different material, or upload a smaller model to see more makers."
+              />
             ) : null}
             {placeError ? (
               <Text accessibilityRole="alert" style={styles.error}>

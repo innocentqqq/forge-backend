@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   AppHeader,
   Button,
@@ -50,6 +50,13 @@ export default function ProfileScreen() {
       setLoading(false);
     }
   }, []);
+
+  const confirmSignOut = () => {
+    Alert.alert("Log out?", "You will need to sign in again to place or manage orders.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log out", style: "destructive", onPress: () => void signOut() },
+    ]);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -172,7 +179,7 @@ export default function ProfileScreen() {
               title: "Log out",
               detail: undefined,
               danger: true,
-              onPress: () => void signOut(),
+              onPress: confirmSignOut,
             },
           ]}
         />

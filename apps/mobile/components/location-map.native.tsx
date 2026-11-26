@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import MapView, { Marker, type MapPressEvent } from 'react-native-maps';
 import { colors } from '../lib/theme';
+import { useReducedMotion } from '../lib/use-reduced-motion';
 import type { LocationMapProps } from './location-map.types';
 
 const REGION_DELTA = 0.012;
@@ -11,6 +12,7 @@ export default function LocationMap({
   onCoordinateChange,
   markerTone = 'public',
 }: LocationMapProps) {
+  const reduceMotion = useReducedMotion();
   const mapRef = useRef<MapView | null>(null);
   const lastAnimated = useRef({ ...coordinate });
 
@@ -33,15 +35,13 @@ export default function LocationMap({
     if (!moved) return;
 
     lastAnimated.current = { ...coordinate };
-    mapRef.current?.animateToRegion(
-      {
-        ...coordinate,
-        latitudeDelta: REGION_DELTA,
-        longitudeDelta: REGION_DELTA,
-      },
-      350,
-    );
-  }, [coordinate]);
+    const region = {
+      ...coordinate,
+      latitudeDelta: REGION_DELTA,
+      longitudeDelta: REGION_DELTA,
+    };
+    mapRef.current?.animateToRegion(region, reduceMotion ? 0 : 350);
+  }, [coordinate, reduceMotion]);
 
   const select = (event: MapPressEvent) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;

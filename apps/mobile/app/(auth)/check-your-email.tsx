@@ -6,7 +6,7 @@ import { AppHeader, Banner, Button, Screen } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { useAuth } from '../../lib/auth';
 import { fonts } from '../../lib/fonts';
-import { colors, radius } from '../../lib/theme';
+import { colors, radius, touchTarget } from '../../lib/theme';
 
 export default function CheckYourEmailScreen() {
   const { email = '', kind = 'reset' } = useLocalSearchParams<{ email?: string; kind?: string }>();
@@ -44,11 +44,23 @@ export default function CheckYourEmailScreen() {
         <Button title="Open email app" onPress={() => void Linking.openURL('mailto:')} style={styles.action} />
         <View style={styles.resend}>
           <Text style={styles.prompt}>Didn’t get it?</Text>
-          <Pressable onPress={() => void resend()} disabled={loading}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Resend email"
+            accessibilityState={{ disabled: loading, busy: loading }}
+            onPress={() => void resend()}
+            disabled={loading}
+            style={styles.linkTarget}
+          >
             <Text style={styles.link}>{loading ? 'Sending…' : 'Resend'}</Text>
           </Pressable>
         </View>
-        <Pressable onPress={() => router.replace('/sign-in')}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to log in"
+          onPress={() => router.replace('/sign-in')}
+          style={styles.linkTarget}
+        >
           <Text style={styles.back}>Back to log in</Text>
         </Pressable>
       </ScrollView>
@@ -71,6 +83,7 @@ const styles = StyleSheet.create({
   action: { alignSelf: 'stretch' },
   resend: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   prompt: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.muted },
-  link: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.link },
-  back: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  link: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.link },
+  back: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.link },
+  linkTarget: { minHeight: touchTarget, justifyContent: 'center' },
 });

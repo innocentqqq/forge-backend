@@ -11,7 +11,7 @@ import { Banner, Button, TextField } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { useAuth } from '../../lib/auth';
 import { fonts } from '../../lib/fonts';
-import { colors, radius } from '../../lib/theme';
+import { colors, radius, touchTarget } from '../../lib/theme';
 
 export default function SignInScreen() {
   const { signIn, signInWithOAuth } = useAuth();
@@ -22,7 +22,7 @@ export default function SignInScreen() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(
     reason === 'no-account'
-      ? 'No account found for that provider. Please sign up first.'
+      ? 'No account found for that provider. Create one to sign in.'
       : null,
   );
   const [loading, setLoading] = useState(false);
@@ -81,7 +81,13 @@ export default function SignInScreen() {
         autoComplete="password"
       />
       <View style={styles.options}>
-        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: remember }} onPress={() => setRemember(!remember)} style={styles.remember}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityLabel="Remember me"
+          accessibilityState={{ checked: remember }}
+          onPress={() => setRemember(!remember)}
+          style={styles.remember}
+        >
           <View style={[styles.checkbox, remember && styles.checkboxOn]}>
             {remember ? <Icon name={icons.check} size={12} color="#FFFFFF" /> : null}
           </View>
@@ -98,7 +104,7 @@ export default function SignInScreen() {
 
 const styles = StyleSheet.create({
   options: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  remember: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  remember: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: touchTarget },
   checkbox: {
     width: 18,
     height: 18,
@@ -110,6 +116,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  rememberText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  rememberText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.link },
 });

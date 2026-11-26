@@ -228,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const deleted = await rejectNewOAuthAccount(exchanged.session);
         if (deleted) {
           await signOutLocally();
-          throw new Error('No account found for that provider. Please sign up first.');
+          throw new Error('No account found for that provider. Create one to sign in.');
         }
         nextRouteRef.current = '/';
       } else {

@@ -2,7 +2,7 @@ import { type BottomTabBarProps } from 'expo-router/js-tabs';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon, icons, type IconName } from './icons';
+import { Icon, icons, statefulIcon, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
 import { colors, radius, sectionPalettes, type AppSection } from '../lib/theme';
 
@@ -51,7 +51,7 @@ export function ProviderTabBar({ state, emitter, navigateToTab }: BottomTabBarPr
               style={styles.item}
             >
               <Icon
-                name={tab.icon}
+                name={statefulIcon(tab.icon, focused)}
                 size={22}
                 color={focused ? palette.accent : colors.accentSoft}
               />
@@ -99,13 +99,13 @@ const styles = StyleSheet.create({
   },
   modeLabel: {
     fontFamily: fonts.bold,
-    fontSize: 9,
-    letterSpacing: 1.2,
+    fontSize: 11,
+    letterSpacing: 0.6,
     color: colors.accentSoft,
   },
   tabs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  item: { flex: 1, height: 48, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  label: { fontFamily: fonts.regular, fontSize: 11, color: colors.accentSoft },
+  item: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  label: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.accentSoft },
   labelActive: { fontFamily: fonts.bold, color: colors.bg },
   indicator: { width: 20, height: 2, borderRadius: radius.pill, backgroundColor: 'transparent' },
   indicatorActive: { backgroundColor: colors.success },

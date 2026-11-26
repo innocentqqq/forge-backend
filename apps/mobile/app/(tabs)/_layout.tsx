@@ -2,7 +2,7 @@ import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon, icons, type IconName } from '../../components/icons';
+import { Icon, icons, statefulIcon, type IconName } from '../../components/icons';
 import { fonts } from '../../lib/fonts';
 import { colors, radius, sectionPalettes, type AppSection } from '../../lib/theme';
 
@@ -53,7 +53,11 @@ function ForgeTabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
             }}
             style={styles.item}
           >
-            <Icon name={tab.icon} size={26} color={focused ? palette.accent : colors.muted} />
+            <Icon
+              name={statefulIcon(tab.icon, focused)}
+              size={26}
+              color={focused ? palette.accent : colors.muted}
+            />
             <Text style={[styles.label, focused && { color: palette.accent, fontFamily: fonts.bold }]}>
               {tab.label}
             </Text>
@@ -98,7 +102,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   item: { flex: 1, height: 52, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  label: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.text },
+  label: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.text },
   labelActive: { fontFamily: fonts.bold, color: colors.link },
   indicator: { width: 22, height: 3, borderRadius: radius.pill, backgroundColor: 'transparent' },
   indicatorActive: { backgroundColor: colors.accent },

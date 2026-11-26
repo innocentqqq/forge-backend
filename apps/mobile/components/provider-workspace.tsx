@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,6 +15,7 @@ import {
   Button,
   Card,
   Chip,
+  EmptyView,
   ErrorView,
   LoadingView,
   Screen,
@@ -21,6 +23,7 @@ import {
   SectionTitle,
   SettingRow,
   Toggle,
+  tabularFigures,
 } from './ui';
 import { Icon, icons } from './icons';
 import { api, ApiError } from '../lib/api';
@@ -31,6 +34,7 @@ import {
   colors,
   radius,
   sectionPalettes,
+  touchTarget,
   type AppSection,
   type SectionPalette,
 } from '../lib/theme';
@@ -361,7 +365,11 @@ function DashboardSection({
           <Text style={styles.cardTitle}>Accepting new orders</Text>
           <Text style={styles.cardDetail}>Pause to stop receiving jobs</Text>
         </View>
-        <Toggle value={provider.availability.isOpen} onValueChange={onAvailabilityChange} />
+        <Toggle
+          value={provider.availability.isOpen}
+          onValueChange={onAvailabilityChange}
+          accessibilityLabel="Accepting new orders"
+        />
       </View>
 
       <View style={styles.statsRow}>
@@ -398,13 +406,22 @@ function DashboardSection({
 
       <View style={styles.ordersHeader}>
         <Text style={styles.sectionTitle}>Recent jobs</Text>
-        <Pressable onPress={() => setShowAll((value) => !value)} hitSlop={8}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={showAll ? 'Show fewer jobs' : 'Show all jobs'}
+          accessibilityState={{ expanded: showAll }}
+          onPress={() => setShowAll((value) => !value)}
+          hitSlop={12}
+        >
           <Text style={styles.link}>{showAll ? 'Show less' : 'See all'}</Text>
         </Pressable>
       </View>
 
       {orders.length === 0 ? (
-        <Text style={styles.empty}>No incoming print requests yet.</Text>
+        <EmptyView
+          title="No jobs yet"
+          message="New print requests will appear here as customers place orders."
+        />
       ) : (
         (showAll ? orders : orders.slice(0, 3)).map((order) => (
           <OrderCard
@@ -501,6 +518,7 @@ function OrderCard({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`Order ${order.order_number}, ${STATUS_LABELS[order.status] ?? order.status}, ${formatMoney(order.price_snapshot)}`}
       onPress={() => onOpen(order)}
       style={({ pressed }) => [styles.orderCard, pressed && styles.pressed]}
     >
@@ -508,7 +526,7 @@ function OrderCard({
         <Text style={styles.orderNumber}>#{order.order_number}</Text>
         <Text style={styles.orderPrice}>{formatMoney(order.price_snapshot)}</Text>
       </View>
-      <Text style={styles.orderTitle} numberOfLines={1}>
+      <Text style={styles.orderTitle} numberOfLines={2}>
         {order.printers?.name ?? 'Print job'}
       </Text>
       <Text style={styles.orderMeta}>
@@ -525,7 +543,20 @@ function OrderCard({
               variant="secondary"
               size="sm"
               labelSize="sm"
-              onPress={() => onUpdateStatus(order, 'DECLINED')}
+              onPress={() =>
+                Alert.alert(
+                  'Decline this order?',
+                  `Order #${order.order_number} will be closed and the customer will be told it was declined.`,
+                  [
+                    { text: 'Keep order', style: 'cancel' },
+                    {
+                      text: 'Decline',
+                      style: 'destructive',
+                      onPress: () => onUpdateStatus(order, 'DECLINED'),
+                    },
+                  ],
+                )
+              }
               style={styles.declineButton}
             />
             <Button
@@ -639,6 +670,7 @@ function SettingsSection({
           <Toggle
             value={provider.availability.isOpen}
             onValueChange={onAvailabilityChange}
+            accessibilityLabel="Accepting new orders"
           />
         </View>
       </Card>
@@ -725,17 +757,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    minHeight: touchTarget,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.accentSoft,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  modeButtonText: { fontFamily: fonts.semibold, fontSize: 11, color: colors.bg },
+  modeButtonText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16.8, color: colors.bg },
 
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  subtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 16, color: colors.muted },
+  subtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
   intro: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
   emptyState: { flex: 1, justifyContent: 'center', gap: 14, paddingHorizontal: 8 },
 
@@ -751,16 +784,16 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   statsRow: { flexDirection: 'row', gap: 12 },
-  statLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted },
-  statValue: { fontFamily: fonts.semibold, fontSize: 22, color: colors.text },
-  statDetail: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  statLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
+  statValue: { fontFamily: fonts.semibold, fontSize: 22, lineHeight: 26.4, color: colors.text, ...tabularFigures },
+  statDetail: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted, ...tabularFigures },
 
-  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  cardDetail: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
-  sectionTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  cardDetail: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  sectionTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
   ordersHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  link: { fontFamily: fonts.semibold, fontSize: 13, color: colors.link },
-  empty: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
+  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.link },
+  empty: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
 
   orderCard: {
@@ -772,12 +805,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   orderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  orderNumber: { fontFamily: fonts.semibold, fontSize: 13, color: colors.muted },
-  orderPrice: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
-  orderTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
-  orderMeta: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
-  orderStatus: { fontFamily: fonts.semibold, fontSize: 13, color: colors.link },
+  orderNumber: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.muted, ...tabularFigures },
+  orderPrice: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text, ...tabularFigures },
+  orderTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  orderMeta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  orderStatus: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.link },
   orderActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  declineButton: { width: 110, height: 36 },
-  acceptButton: { flex: 1, height: 36 },
+  declineButton: { width: 110, minHeight: touchTarget },
+  acceptButton: { flex: 1, minHeight: touchTarget },
 });

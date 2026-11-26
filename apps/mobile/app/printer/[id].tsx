@@ -14,6 +14,7 @@ import {
   PageTitle,
   Screen,
   TextField,
+  tabularFigures,
 } from '../../components/ui';
 import { api, estimatePrice } from '../../lib/api';
 import { formatMoney } from '../../lib/format';
@@ -206,7 +207,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
-  location: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted, marginTop: -8 },
+  location: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted, marginTop: -8 },
 
   summary: {
     backgroundColor: colors.accentSoft,
@@ -217,11 +218,11 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   stat: { flex: 1, gap: 2 },
-  statValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  statLabel: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
+  statValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text, ...tabularFigures },
+  statLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
 
-  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  contactLine: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  contactLine: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
 
   field: { gap: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -229,6 +230,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   estimateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  estimateLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  estimateValue: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 29, color: colors.text },
+  estimateLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  estimateValue: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 29, color: colors.text, ...tabularFigures },
 });

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,7 @@ import {
   LoadingView,
   ProgressBar,
   Screen,
+  tabularFigures,
 } from "../../components/ui";
 import { api } from "../../lib/api";
 import { formatMoney, STATUS_LABELS } from "../../lib/format";
@@ -96,6 +98,22 @@ export default function ProviderOrderScreen() {
   const advance = async () => {
     if (!params.id || !action?.next) return;
     const nextStatus = action.next;
+    if (["READY_FOR_PICKUP", "COMPLETED"].includes(nextStatus)) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          nextStatus === "COMPLETED" ? "Complete this order?" : "Mark ready for pickup?",
+          nextStatus === "COMPLETED"
+            ? "The customer will see the order as completed. Only do this after the handoff is finished."
+            : "The customer will be told their print is ready for pickup.",
+          [
+            { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+            { text: "Confirm", onPress: () => resolve(true) },
+          ],
+          { onDismiss: () => resolve(false) },
+        );
+      });
+      if (!confirmed) return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -158,7 +176,11 @@ export default function ProviderOrderScreen() {
 
         <View style={styles.card}>
           <View style={styles.summaryTop}>
-            <Text style={styles.summaryTitle} numberOfLines={1}>
+            <Text
+              style={styles.summaryTitle}
+              numberOfLines={2}
+              accessibilityLabel={params.title ?? "Print job"}
+            >
               {params.title ?? "Print job"}
             </Text>
             <Text style={styles.summaryPrice}>
@@ -223,8 +245,10 @@ export default function ProviderOrderScreen() {
           ) : null}
           {params.id ? (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open customer tracking"
               onPress={() => router.push(`/order/${params.id}`)}
-              hitSlop={8}
+              hitSlop={12}
             >
               <Text style={styles.link}>Open customer tracking</Text>
             </Pressable>
@@ -313,10 +337,12 @@ export default function ProviderOrderScreen() {
         </View>
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Contact customer and open messages"
           onPress={() =>
             router.push(`/messages/${params.id}?role=provider`)
           }
-          hitSlop={8}
+          hitSlop={12}
         >
           <Text style={styles.link}>Contact &amp; messages</Text>
         </Pressable>
@@ -344,20 +370,21 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18.2,
     color: colors.muted,
   },
   sectionTitle: {
     fontFamily: fonts.semibold,
     fontSize: 16,
-    lineHeight: 19.4,
+    lineHeight: 20.8,
     color: colors.text,
   },
   progressValue: {
     fontFamily: fonts.semibold,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18.2,
     color: colors.link,
+    ...tabularFigures,
   },
 
   card: {
@@ -378,19 +405,20 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.semibold,
     fontSize: 16,
-    lineHeight: 19.4,
+    lineHeight: 20.8,
     color: colors.text,
   },
   summaryPrice: {
     fontFamily: fonts.bold,
     fontSize: 16,
-    lineHeight: 19.4,
+    lineHeight: 20.8,
     color: colors.text,
+    ...tabularFigures,
   },
   meta: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18.2,
     color: colors.muted,
   },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 6 },
@@ -416,7 +444,7 @@ const styles = StyleSheet.create({
   demoCopy: {
     fontFamily: fonts.regular,
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 16.8,
     color: colors.muted,
   },
 
@@ -447,8 +475,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  dotLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7 },
-  dotLabelDone: { color: "#FFFFFF" },
+  dotLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2 },
+  dotLabelDone: { color: colors.onAccent },
   dotLabelActive: { color: colors.accent },
   dotLabelPending: { color: colors.muted },
   connector: {
@@ -467,22 +495,22 @@ const styles = StyleSheet.create({
   stepTitleActive: { color: colors.text },
   stepDetail: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 13.3,
+    fontSize: 12,
+    lineHeight: 16.8,
     color: colors.muted,
   },
 
   link: {
     fontFamily: fonts.semibold,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18.2,
     color: colors.link,
     textAlign: "center",
   },
   footnote: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 13.3,
+    fontSize: 12,
+    lineHeight: 16.8,
     color: colors.muted,
     textAlign: "center",
   },

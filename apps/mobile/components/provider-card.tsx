@@ -4,7 +4,7 @@ import type { ProviderResult } from "../lib/marketplace-types";
 import { formatMoney } from "../lib/format";
 import { fonts } from "../lib/fonts";
 import { colors, radius, shadow } from "../lib/theme";
-import { Badge } from "./ui";
+import { Badge, tabularFigures } from "./ui";
 
 export function ProviderCard({
   provider,
@@ -27,6 +27,7 @@ export function ProviderCard({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${provider.displayName}. ${distance}. ${eta}. ${provider.fits ? `From ${formatMoney(provider.estimate)}` : "Model does not fit"}.`}
       accessibilityState={{ selected, disabled: !provider.fits }}
       disabled={!provider.fits}
       onPress={onPress}
@@ -49,7 +50,11 @@ export function ProviderCard({
         )}
         <View style={styles.identity}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>
+            <Text
+              style={styles.name}
+              numberOfLines={2}
+              accessibilityLabel={provider.displayName}
+            >
               {provider.displayName}
             </Text>
             {provider.isVerified ? (
@@ -69,7 +74,7 @@ export function ProviderCard({
       </View>
 
       {provider.description ? (
-        <Text style={styles.description} numberOfLines={2}>
+        <Text style={styles.description} numberOfLines={3}>
           {provider.description}
         </Text>
       ) : null}
@@ -125,29 +130,31 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: fonts.semibold,
     fontSize: 16,
+    lineHeight: 20.8,
     color: colors.text,
   },
-  type: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  type: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
   priceWrap: { alignItems: "flex-end" },
-  priceLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.muted },
-  price: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
+  priceLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
+  price: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text, ...tabularFigures },
   description: {
     fontFamily: fonts.regular,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 16.8,
     color: colors.muted,
   },
-  meta: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  meta: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted, ...tabularFigures },
   privacy: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 16.8,
     color: colors.link,
   },
   warning: {
     fontFamily: fonts.semibold,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 16.8,
     color: colors.danger,
+    ...tabularFigures,
   },
 });

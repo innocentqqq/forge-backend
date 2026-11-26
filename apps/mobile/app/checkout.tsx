@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Radio, Screen, SectionHero } from '../components/ui';
+import { AppHeader, Button, Radio, Screen, SectionHero, tabularFigures } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { api, estimatePrice } from '../lib/api';
 import { formatDate, formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
-import { colors, radius, sectionPalettes, shadow } from '../lib/theme';
+import { colors, radius, sectionPalettes, touchTarget } from '../lib/theme';
 import type { Material, Quality } from '../lib/types';
 
 const palette = sectionPalettes.checkout;
@@ -100,7 +100,13 @@ export default function CheckoutScreen() {
         <View style={styles.card}>
           <View style={styles.fileRow}>
             <Icon name={icons.box} size={26} color={palette.accent} />
-            <Text style={styles.fileName} numberOfLines={1}>{params.fileName || printerName}</Text>
+            <Text
+              style={styles.fileName}
+              numberOfLines={2}
+              accessibilityLabel={params.fileName || printerName}
+            >
+              {params.fileName || printerName}
+            </Text>
           </View>
           <Row label="Material" value={material} />
           <Row label="Color" value={params.color ?? 'White'} />
@@ -119,12 +125,13 @@ export default function CheckoutScreen() {
         <View style={styles.card}>
           <Pressable
             accessibilityRole="radio"
+            accessibilityLabel="Campus card ending in 4021"
             accessibilityState={{ selected: payment === 'PROMPTPAY' }}
             onPress={() => setPayment('PROMPTPAY')}
             style={styles.paymentRow}
           >
             <View style={styles.paymentLeft}>
-              <Radio selected={payment === 'PROMPTPAY'} onPress={() => setPayment('PROMPTPAY')} />
+              <Radio selected={payment === 'PROMPTPAY'} />
               <Text style={styles.paymentTitle}>Campus card</Text>
             </View>
             <Text style={styles.paymentHint}>•••• 4021</Text>
@@ -132,6 +139,7 @@ export default function CheckoutScreen() {
           <View style={styles.divider} />
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Add payment method"
             onPress={() => Alert.alert('Add payment method', 'Card management is handled by your campus account.')}
             style={styles.paymentRow}
           >
@@ -142,7 +150,7 @@ export default function CheckoutScreen() {
           </Pressable>
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
         <Button title="Place order" loading={busy} onPress={() => void place()} />
         <Text style={styles.terms}>By placing your order you agree to Forge’s Terms of Service.</Text>
@@ -163,7 +171,7 @@ function Row({ label, value, emphasis = false }: { label: string; value: string;
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
-  section: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: palette.ink },
+  section: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink },
 
   card: {
     backgroundColor: palette.surface,
@@ -174,13 +182,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  fileName: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  fileName: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
 
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  rowLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  rowValue: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  rowLabelStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  rowValueStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: palette.accent },
+  rowLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  rowValue: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.text, ...tabularFigures },
+  rowLabelStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  rowValueStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: palette.accent, ...tabularFigures },
 
   priceCard: {
     backgroundColor: palette.soft,
@@ -189,16 +197,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: 14,
     gap: 10,
-    ...shadow.card,
   },
 
-  paymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 20 },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: touchTarget },
   paymentLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  paymentTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  paymentLink: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: palette.accent },
-  paymentHint: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  paymentTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  paymentLink: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: palette.accent },
+  paymentHint: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted, ...tabularFigures },
   divider: { height: 1, backgroundColor: colors.surfaceSubtle },
 
-  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.danger },
-  terms: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted, textAlign: 'center' },
+  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.danger },
+  terms: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted, textAlign: 'center' },
 });

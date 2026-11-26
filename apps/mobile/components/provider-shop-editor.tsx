@@ -505,7 +505,11 @@ function HoursForm({ provider, onSaved, onError }: FormProps) {
             <View key={day} style={styles.dayBlock}>
               <View style={styles.toggleRow}>
                 <Text style={styles.dayLabel}>{DAY_LABELS[day]}</Text>
-                <Toggle value={Boolean(range)} onValueChange={(enabled) => toggleDay(day, enabled)} />
+                <Toggle
+                  value={Boolean(range)}
+                  onValueChange={(enabled) => toggleDay(day, enabled)}
+                  accessibilityLabel={`Open for pickup on ${DAY_LABELS[day]}`}
+                />
               </View>
               {range ? (
                 <View style={styles.row}>
@@ -720,7 +724,11 @@ function PrinterEditorCard({
 
       <View style={styles.toggleRow}>
         <Text style={styles.cardDetail}>Available for orders</Text>
-        <Toggle value={form.isActive} onValueChange={(value) => patch({ isActive: value })} />
+        <Toggle
+          value={form.isActive}
+          onValueChange={(value) => patch({ isActive: value })}
+          accessibilityLabel="Available for orders"
+        />
       </View>
 
       <Button title={printer ? 'Save printer' : 'Add printer'} onPress={() => void save()} loading={saving} />

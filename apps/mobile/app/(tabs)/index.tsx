@@ -9,11 +9,20 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { AppHeader, Badge, Screen, SectionHero } from "../../components/ui";
+import {
+  AppHeader,
+  Badge,
+  Button,
+  EmptyView,
+  ErrorView,
+  LoadingView,
+  Screen,
+  SectionHero,
+} from "../../components/ui";
 import { Icon, icons } from "../../components/icons";
 import { api } from "../../lib/api";
 import { fonts } from "../../lib/fonts";
-import { colors, radius, sectionPalettes } from "../../lib/theme";
+import { colors, radius, sectionPalettes, spacing } from "../../lib/theme";
 import type { Printer } from "../../lib/types";
 
 const LOCATION = { lat: 13.8708, lng: 100.6053 };
@@ -84,6 +93,10 @@ export default function HomeScreen() {
             onChangeText={setSearch}
             placeholder="Search for printers, materials"
             placeholderTextColor={colors.muted}
+            accessibilityLabel="Search printers and materials"
+            autoCorrect={false}
+            autoCapitalize="none"
+            autoComplete="off"
             style={styles.searchInput}
             returnKeyType="search"
             onSubmitEditing={() => router.push("/upload")}
@@ -91,6 +104,8 @@ export default function HomeScreen() {
         </View>
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Upload a 3D design"
           onPress={chooseDesign}
           style={({ pressed }) => [styles.upload, pressed && styles.pressed]}
         >
@@ -99,12 +114,20 @@ export default function HomeScreen() {
           <Text style={styles.uploadHint}>STL and OBJ supported</Text>
         </Pressable>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <ErrorView
+            title="Could not load printers"
+            message={error}
+            onRetry={() => void load()}
+          />
+        ) : null}
 
         <Text style={styles.quickActionsTitle}>Quick Actions</Text>
 
         <View style={styles.actions}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New order"
             onPress={() => void chooseDesign()}
             style={({ pressed }) => [
               styles.actionCard,
@@ -118,6 +141,8 @@ export default function HomeScreen() {
             </View>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="My orders"
             onPress={() => router.push("/orders")}
             style={({ pressed }) => [
               styles.actionCard,
@@ -134,17 +159,23 @@ export default function HomeScreen() {
 
         <View style={styles.sectionRow}>
           <Text style={styles.nearbyTitle}>Nearby Printers</Text>
-          <Pressable onPress={() => router.push("/upload")}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Find printers for my model"
+            onPress={() => router.push("/upload")}
+          >
             <Text style={styles.seeAll}>Find for my model</Text>
           </Pressable>
         </View>
 
         {loading ? (
-          <Text style={styles.empty}>Finding nearby printers…</Text>
+          <LoadingView label="Finding nearby printers…" />
         ) : (
           visible.slice(0, 4).map((printer) => (
             <Pressable
               key={printer.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Choose ${printer.name}`}
               onPress={() => router.push("/upload")}
               style={({ pressed }) => [
                 styles.printerCard,
@@ -168,7 +199,11 @@ export default function HomeScreen() {
         )}
 
         {!loading && visible.length === 0 ? (
-          <Text style={styles.empty}>No printers are available yet.</Text>
+          <EmptyView
+            title="No matching printers"
+            message="Try a different search, or upload a model to see makers that can print it."
+            action={<Button title="Upload a model" onPress={chooseDesign} />}
+          />
         ) : null}
         <View style={{ height: 96 }} />
       </ScrollView>
@@ -181,7 +216,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
 
   searchBox: {
-    height: 41,
+    minHeight: 44,
     borderRadius: radius.sm,
     backgroundColor: palette.soft,
     borderWidth: 1,
@@ -193,15 +228,15 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontFamily: fonts.light,
+    fontFamily: fonts.regular,
     fontSize: 16,
-    lineHeight: 19.4,
+    lineHeight: 24,
     color: colors.text,
     padding: 0,
   },
 
   upload: {
-    height: 149,
+    minHeight: 149,
     backgroundColor: palette.soft,
     borderWidth: 1,
     borderColor: palette.border,
@@ -220,14 +255,14 @@ const styles = StyleSheet.create({
   uploadHint: {
     fontFamily: fonts.regular,
     fontSize: 12,
-    lineHeight: 14.5,
+    lineHeight: 16.8,
     color: colors.muted,
   },
 
   error: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18.2,
     color: colors.danger,
   },
 
@@ -258,7 +293,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 12 },
   actionCard: {
     flex: 1,
-    height: 84,
+    minHeight: 84,
     padding: 12,
     backgroundColor: palette.soft,
     borderWidth: 1,
@@ -283,7 +318,7 @@ const styles = StyleSheet.create({
   },
 
   printerCard: {
-    height: 74,
+    minHeight: 74,
     padding: 10,
     borderRadius: radius.sm,
     backgroundColor: palette.surface,
@@ -312,16 +347,16 @@ const styles = StyleSheet.create({
   },
   printerMeta: {
     fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 13.3,
+    fontSize: 12,
+    lineHeight: 16.8,
     color: colors.muted,
   },
 
   empty: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18.2,
     color: colors.muted,
-    paddingVertical: 16,
   },
+  emptyState: { gap: spacing.md, paddingVertical: 16 },
 });

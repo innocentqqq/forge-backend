@@ -9,7 +9,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { AppHeader, Button, Screen, SectionHero } from "../components/ui";
+import {
+  AppHeader,
+  Button,
+  Screen,
+  SectionHero,
+  tabularFigures,
+} from "../components/ui";
 import { api } from "../lib/api";
 import { fonts } from "../lib/fonts";
 import { colors, radius, sectionPalettes } from "../lib/theme";
@@ -120,6 +126,8 @@ export default function UploadScreen() {
 
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Choose a model file"
+          accessibilityState={{ disabled: busy, busy }}
           onPress={() => void chooseFile()}
           disabled={busy}
           style={({ pressed }) => [
@@ -145,7 +153,12 @@ export default function UploadScreen() {
               <Text style={styles.progressText}>Upload progress</Text>
               <Text style={styles.progressText}>{progress}%</Text>
             </View>
-            <View style={styles.track}>
+            <View
+              accessibilityRole="progressbar"
+              accessibilityLabel={`Upload progress: ${progress}%`}
+              accessibilityValue={{ min: 0, max: 100, now: progress, text: `${progress}%` }}
+              style={styles.track}
+            >
               <View style={[styles.fill, { width: `${progress}%` }]} />
             </View>
           </View>
@@ -204,6 +217,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 12,
     color: colors.text,
+    ...tabularFigures,
   },
   track: {
     height: 7,

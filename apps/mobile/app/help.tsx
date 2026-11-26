@@ -3,6 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-na
 import { AppHeader, Button, Screen } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { fonts } from '../lib/fonts';
+import { useReducedMotion } from '../lib/use-reduced-motion';
 import { colors, radius } from '../lib/theme';
 
 const FAQS = [
@@ -29,6 +30,7 @@ const FAQS = [
 ];
 
 export default function HelpScreen() {
+  const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState<number | null>(null);
 
   return (
@@ -49,7 +51,9 @@ export default function HelpScreen() {
             >
               <View style={styles.questionRow}>
                 <Text style={styles.question}>{item.question}</Text>
-                <View style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}>
+                <View
+                  style={reduceMotion ? undefined : { transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}
+                >
                   <Icon name={icons.chevronRight} size={16} color={colors.muted} />
                 </View>
               </View>
@@ -85,8 +89,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   questionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  question: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  answer: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
+  question: { flex: 1, fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  answer: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
 
   support: {
     backgroundColor: colors.surface,
@@ -96,6 +100,6 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
-  supportTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  supportCopy: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
+  supportTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  supportCopy: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
 });
