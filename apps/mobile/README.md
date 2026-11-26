@@ -12,6 +12,7 @@ Expo (React Native + TypeScript + Expo Router) client for the `forge-backend` AP
 - Per-order contact cards with phone dialing and a customer↔provider message thread on both order screens.
 - **Provider** tab: full provider setup wizard (type, public/private location, printers, per-material rates, pickup hours, agreements), activation gate, open/closed toggle, queue settings, and incoming orders. The Shop tab also has quick editors for shop details/phone, pickup location and map pin, open days, and printers, so common changes don't require rerunning onboarding.
 - Public provider cards: verified badge, description, photo URL, individual-maker privacy note, and “model doesn’t fit” state.
+- Shared design system: primary `#4052D6`, secondary `#FFFFFF`, tertiary `#36454F`, plus section palettes for Home, Orders, Profile, provider Dashboard, Jobs, Shop, provider search, configure, checkout, and messages so each area feels distinct.
 
 ## 1. Configure
 
@@ -70,7 +71,7 @@ points stay approximately 500 m away from the exact point.
 The map works in Expo Go and iOS builds without extra keys. Android development builds and
 store builds need a Google Maps SDK for Android API key added to the `react-native-maps`
 config plugin in `app.json`; see the Expo `react-native-maps` docs for the key restrictions.
-Web keeps the manual latitude/longitude fields as a fallback.
+Public latitude/longitude fields are no longer entered by hand; the map sets them (with the individual 500 m offset). On web, use the **Use demo location (Bangkok)** shortcut because the interactive map is native-only.
 
 ## 2. Deploy the Supabase API
 

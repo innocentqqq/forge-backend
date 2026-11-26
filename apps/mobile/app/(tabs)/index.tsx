@@ -9,14 +9,15 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { AppHeader, Screen } from "../../components/ui";
+import { AppHeader, Badge, Screen, SectionHero } from "../../components/ui";
 import { Icon, icons } from "../../components/icons";
 import { api } from "../../lib/api";
 import { fonts } from "../../lib/fonts";
-import { colors, radius } from "../../lib/theme";
+import { colors, radius, sectionPalettes } from "../../lib/theme";
 import type { Printer } from "../../lib/types";
 
 const LOCATION = { lat: 13.8708, lng: 100.6053 };
+const palette = sectionPalettes.home;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -57,7 +58,7 @@ export default function HomeScreen() {
 
   return (
     <Screen>
-      <AppHeader />
+      <AppHeader section="home" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -69,13 +70,20 @@ export default function HomeScreen() {
           />
         }
       >
+        <SectionHero
+          section="home"
+          title="Find your next print"
+          subtitle="Upload a model, compare local makers, and watch it build."
+          action={<Badge label="Marketplace" accent={palette.accent} />}
+        />
+
         <View style={styles.searchBox}>
-          <Icon name={icons.search} size={24} color={colors.text} />
+          <Icon name={icons.search} size={24} color={palette.accent} />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search for printers, materials"
-            placeholderTextColor={colors.text}
+            placeholderTextColor={colors.muted}
             style={styles.searchInput}
             returnKeyType="search"
             onSubmitEditing={() => router.push("/upload")}
@@ -86,7 +94,7 @@ export default function HomeScreen() {
           onPress={chooseDesign}
           style={({ pressed }) => [styles.upload, pressed && styles.pressed]}
         >
-          <Icon name={icons.box} size={32} color={colors.text} />
+          <Icon name={icons.box} size={32} color={palette.accent} />
           <Text style={styles.uploadTitle}>Upload Your 3D Design</Text>
           <Text style={styles.uploadHint}>STL and OBJ supported</Text>
         </Pressable>
@@ -103,7 +111,7 @@ export default function HomeScreen() {
               pressed && styles.pressed,
             ]}
           >
-            <Icon name={icons.cube} size={38} color={colors.text} />
+            <Icon name={icons.cube} size={38} color={palette.accent} />
             <View style={styles.actionCopy}>
               <Text style={styles.actionTitle}>New Order</Text>
               <Text style={styles.actionSubtitle}>Start Fresh</Text>
@@ -116,7 +124,7 @@ export default function HomeScreen() {
               pressed && styles.pressed,
             ]}
           >
-            <Icon name={icons.box} size={38} color={colors.text} />
+            <Icon name={icons.box} size={38} color={palette.accent} />
             <View style={styles.actionCopy}>
               <Text style={styles.actionTitle}>My Orders</Text>
               <Text style={styles.actionSubtitle}>Track Prints</Text>
@@ -144,7 +152,7 @@ export default function HomeScreen() {
               ]}
             >
               <View style={styles.printerIcon}>
-                <Icon name={icons.university} size={24} color={colors.text} />
+                <Icon name={icons.university} size={24} color={palette.accent} />
               </View>
               <View style={styles.printerDetails}>
                 <Text style={styles.printerName}>{printer.name}</Text>
@@ -175,7 +183,9 @@ const styles = StyleSheet.create({
   searchBox: {
     height: 41,
     borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 9,
@@ -192,7 +202,9 @@ const styles = StyleSheet.create({
 
   upload: {
     height: 149,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
@@ -202,14 +214,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 16,
     lineHeight: 19.4,
-    color: colors.text,
+    color: palette.ink,
     textAlign: "center",
   },
   uploadHint: {
     fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 14.5,
-    color: colors.text,
+    color: colors.muted,
   },
 
   error: {
@@ -223,13 +235,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 16,
     lineHeight: 19.4,
-    color: colors.text,
+    color: palette.ink,
   },
   nearbyTitle: {
     fontFamily: fonts.extrabold,
     fontSize: 16,
     lineHeight: 19.4,
-    color: colors.text,
+    color: palette.ink,
   },
   sectionRow: {
     flexDirection: "row",
@@ -240,7 +252,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 16,
     lineHeight: 19.4,
-    color: colors.text,
+    color: palette.accent,
   },
 
   actions: { flexDirection: "row", gap: 12 },
@@ -248,7 +260,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 84,
     padding: 12,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "center",
@@ -259,20 +273,24 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 16,
     lineHeight: 19.4,
-    color: colors.text,
+    color: palette.ink,
   },
   actionSubtitle: {
     fontFamily: fonts.regular,
     fontSize: 13,
     lineHeight: 15.7,
-    color: colors.text,
+    color: colors.muted,
   },
 
   printerCard: {
     height: 74,
     padding: 10,
     borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderLeftWidth: 3,
+    borderLeftColor: palette.accent,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -281,7 +299,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 48,
     borderRadius: radius.sm,
-    backgroundColor: "#AABCF2",
+    backgroundColor: palette.soft,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -290,13 +308,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     lineHeight: 15.7,
-    color: colors.text,
+    color: palette.ink,
   },
   printerMeta: {
     fontFamily: fonts.regular,
     fontSize: 11,
     lineHeight: 13.3,
-    color: colors.text,
+    color: colors.muted,
   },
 
   empty: {

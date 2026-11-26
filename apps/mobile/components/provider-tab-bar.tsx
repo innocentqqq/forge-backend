@@ -4,14 +4,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, icons, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
-import { colors, radius } from '../lib/theme';
+import { colors, radius, sectionPalettes, type AppSection } from '../lib/theme';
 
-type ProviderTab = { label: string; icon: IconName };
+type ProviderTab = { label: string; icon: IconName; section: AppSection };
 
 const PROVIDER_TABS: Record<string, ProviderTab> = {
-  index: { label: 'Dashboard', icon: icons.home },
-  orders: { label: 'Jobs', icon: icons.briefcase },
-  settings: { label: 'Shop', icon: icons.settings },
+  index: { label: 'Dashboard', icon: icons.home, section: 'dashboard' },
+  orders: { label: 'Jobs', icon: icons.briefcase, section: 'jobs' },
+  settings: { label: 'Shop', icon: icons.settings, section: 'shop' },
 };
 
 export function ProviderTabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
@@ -30,6 +30,7 @@ export function ProviderTabBar({ state, emitter, navigateToTab }: BottomTabBarPr
           const tab = PROVIDER_TABS[route.name];
           if (!tab) return null;
           const focused = focusedRoute?.key === route.key;
+          const palette = sectionPalettes[tab.section];
 
           return (
             <Pressable
@@ -52,10 +53,17 @@ export function ProviderTabBar({ state, emitter, navigateToTab }: BottomTabBarPr
               <Icon
                 name={tab.icon}
                 size={22}
-                color={focused ? colors.success : colors.accentSoft}
+                color={focused ? palette.accent : colors.accentSoft}
               />
-              <Text style={[styles.label, focused && styles.labelActive]}>{tab.label}</Text>
-              <View style={[styles.indicator, focused && styles.indicatorActive]} />
+              <Text style={[styles.label, focused && { color: palette.accent, fontFamily: fonts.bold }]}>
+                {tab.label}
+              </Text>
+              <View
+                style={[
+                  styles.indicator,
+                  focused && { backgroundColor: palette.accent },
+                ]}
+              />
             </Pressable>
           );
         })}

@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ModelViewer } from '../../components/ModelViewer';
-import { AppHeader, Button, ErrorView, LoadingView, ProgressBar, Screen, StatusPill } from '../../components/ui';
+import { AppHeader, Badge, Button, ErrorView, LoadingView, ProgressBar, Screen, SectionHero, StatusPill } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
 import { resolveViewerSource } from '../../lib/model-preview';
@@ -11,7 +11,9 @@ import type { ModelDetails } from '../../lib/marketplace-types';
 import { formatMoney, STATUS_LABELS } from '../../lib/format';
 import { fonts } from '../../lib/fonts';
 import { ORDER_STAGES, PRINT_COMPLETE_STATUSES } from '../../lib/order-status';
-import { colors, radius, shadow } from '../../lib/theme';
+import { colors, radius, sectionPalettes, shadow } from '../../lib/theme';
+
+const palette = sectionPalettes.orders;
 
 function etaLabel(eta: string | null) {
   if (!eta) return 'Provider to confirm';
@@ -44,12 +46,12 @@ export default function OrderTrackingScreen() {
   }, [order?.modelId]);
 
   if (loading && !order) {
-    return <Screen><AppHeader back /><LoadingView label="Loading order…" /></Screen>;
+    return <Screen><AppHeader back section="orders" /><LoadingView label="Loading order…" /></Screen>;
   }
   if (error && !order) {
-    return <Screen><AppHeader back /><ErrorView message={error} onRetry={() => router.replace(`/order/${id}`)} /></Screen>;
+    return <Screen><AppHeader back section="orders" /><ErrorView message={error} onRetry={() => router.replace(`/order/${id}`)} /></Screen>;
   }
-  if (!order) return <Screen><AppHeader back /><ErrorView message="Order not found." onRetry={() => router.replace('/orders')} /></Screen>;
+  if (!order) return <Screen><AppHeader back section="orders" /><ErrorView message="Order not found." onRetry={() => router.replace('/orders')} /></Screen>;
 
   const currentIndex = ORDER_STAGES.indexOf(order.status);
   const progress = PRINT_COMPLETE_STATUSES.includes(order.status)
@@ -86,13 +88,18 @@ export default function OrderTrackingScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back section="orders" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!viewerInteracting}
       >
-        <Text style={styles.title}>Order tracking</Text>
+        <SectionHero
+          section="orders"
+          title="Order tracking"
+          subtitle="Watch your model build from the bottom up."
+          action={<Badge label={`${Math.round(progress)}% complete`} accent={palette.accent} />}
+        />
         <View style={styles.summary}>
           <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
           <Text style={styles.provider}>{order.printers?.name ?? 'Your provider'}</Text>
@@ -154,7 +161,7 @@ export default function OrderTrackingScreen() {
             <Text style={styles.progressLabel}>Build progress</Text>
             <Text style={styles.progressValue}>{progress}%</Text>
           </View>
-          <ProgressBar value={progress} height={12} />
+          <ProgressBar value={progress} height={12} accent={palette.accent} />
         </View>
 
         <View style={styles.etaCard}>
@@ -210,8 +217,14 @@ export default function OrderTrackingScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, gap: 16 },
-  title: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
-  summary: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, gap: 5 },
+  summary: {
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    padding: 14,
+    gap: 5,
+  },
   orderNumber: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
   provider: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
   meta: { fontFamily: fonts.regular, fontSize: 13, color: colors.text },

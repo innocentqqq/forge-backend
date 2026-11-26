@@ -1,14 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Radio, Screen } from '../components/ui';
+import { AppHeader, Button, Radio, Screen, SectionHero } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { api, estimatePrice } from '../lib/api';
 import { formatDate, formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
-import { colors, radius, shadow } from '../lib/theme';
+import { colors, radius, sectionPalettes, shadow } from '../lib/theme';
 import type { Material, Quality } from '../lib/types';
 
+const palette = sectionPalettes.checkout;
 const SERVICE_FEE = 2;
 const QUALITY_LABELS: Record<Quality, string> = { DRAFT: 'Draft · 0.2 mm', STANDARD: 'Standard · 0.15 mm', HIGH: 'High · 0.1 mm' };
 
@@ -88,13 +89,17 @@ export default function CheckoutScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back section="checkout" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Checkout</Text>
+        <SectionHero
+          section="checkout"
+          title="Checkout"
+          subtitle="Review your print and confirm payment."
+        />
 
         <View style={styles.card}>
           <View style={styles.fileRow}>
-            <Icon name={icons.box} size={26} color={colors.text} />
+            <Icon name={icons.box} size={26} color={palette.accent} />
             <Text style={styles.fileName} numberOfLines={1}>{params.fileName || printerName}</Text>
           </View>
           <Row label="Material" value={material} />
@@ -158,13 +163,12 @@ function Row({ label, value, emphasis = false }: { label: string; value: string;
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
-  title: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  section: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  section: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: palette.ink },
 
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     borderRadius: radius.md,
     padding: 14,
     gap: 10,
@@ -176,10 +180,12 @@ const styles = StyleSheet.create({
   rowLabel: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
   rowValue: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
   rowLabelStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  rowValueStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  rowValueStrong: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: palette.accent },
 
   priceCard: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radius.md,
     padding: 14,
     gap: 10,
@@ -189,7 +195,7 @@ const styles = StyleSheet.create({
   paymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 20 },
   paymentLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   paymentTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  paymentLink: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  paymentLink: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: palette.accent },
   paymentHint: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
   divider: { height: 1, backgroundColor: colors.surfaceSubtle },
 

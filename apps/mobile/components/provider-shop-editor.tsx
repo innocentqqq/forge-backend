@@ -4,6 +4,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { LocationPicker, parseCoordinate } from './location-picker';
 import {
   AppHeader,
+  Badge,
   Banner,
   Button,
   Card,
@@ -12,6 +13,7 @@ import {
   FilledField,
   LoadingView,
   ScreenScroll,
+  SectionHero,
   SectionTitle,
   TextField,
   Toggle,
@@ -26,7 +28,7 @@ import {
   type ProviderPrinter,
   type ProviderProfile,
 } from '../lib/provider-onboarding';
-import { colors } from '../lib/theme';
+import { colors, sectionPalettes } from '../lib/theme';
 import { MATERIALS, type Material, type PickupHours } from '../lib/types';
 
 export type ProviderShopSection = 'profile' | 'location' | 'hours' | 'printers';
@@ -87,13 +89,18 @@ export default function ProviderShopEditor({ section }: { section: ProviderShopS
     setError(err instanceof Error ? err.message : 'Could not save your changes');
   };
 
+  const palette = sectionPalettes.shop;
+
   return (
     <ScreenScroll>
-      <AppHeader back />
-      <Text style={styles.pageTitle}>{TITLES[section]}</Text>
-      <Text style={styles.intro}>{SUBTITLES[section]}</Text>
+      <AppHeader back section="shop" />
+      <SectionHero
+        section="shop"
+        title={TITLES[section]}
+        subtitle={SUBTITLES[section]}
+        action={provider ? <Badge label={provider.displayName} accent={palette.accent} /> : null}
+      />
 
-      {provider ? <Text style={styles.shopName}>{provider.displayName}</Text> : null}
       {saved ? <Banner tone="success" message="Saved." /> : null}
       {error ? <Banner message={error} /> : null}
 
@@ -298,7 +305,7 @@ function LocationForm({ provider, onSaved, onError }: FormProps) {
       return;
     }
     if (Boolean(optionalNumber(form.latitude)) !== Boolean(optionalNumber(form.longitude))) {
-      onError(new Error('Enter both public latitude and longitude, or leave both blank.'));
+      onError(new Error('Choose a pickup point on the map to set both coordinates.'));
       return;
     }
     if (
@@ -392,24 +399,11 @@ function LocationForm({ provider, onSaved, onError }: FormProps) {
           />
         )}
 
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <FilledField
-              label="Public latitude"
-              value={form.latitude}
-              onChangeText={(value) => patch({ latitude: value })}
-              keyboardType="decimal-pad"
-            />
-          </View>
-          <View style={styles.flex}>
-            <FilledField
-              label="Public longitude"
-              value={form.longitude}
-              onChangeText={(value) => patch({ longitude: value })}
-              keyboardType="decimal-pad"
-            />
-          </View>
-        </View>
+        <Text style={styles.finePrint}>
+          {isIndividual
+            ? 'The public search point is set automatically from the private pin.'
+            : 'The public pickup point is set from the map.'}
+        </Text>
 
         {isIndividual ? (
           <>
@@ -739,9 +733,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: 'row', gap: 10 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pageTitle: { fontFamily: fonts.semibold, fontSize: 24, color: colors.text, marginTop: 8 },
-  intro: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
-  shopName: { fontFamily: fonts.semibold, fontSize: 13, color: colors.link },
   cardTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
   cardDetail: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
   fieldLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },

@@ -2,12 +2,14 @@ import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { OrderMessages } from '../../components/order-messages';
-import { AppHeader, Banner, Button, LoadingView, ScreenScroll } from '../../components/ui';
+import { AppHeader, Banner, Button, LoadingView, ScreenScroll, SectionHero } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fonts } from '../../lib/fonts';
 import type { MarketplaceOrder } from '../../lib/marketplace-types';
 import type { OrderMessageRole } from '../../lib/types';
-import { colors, radius } from '../../lib/theme';
+import { colors, radius, sectionPalettes } from '../../lib/theme';
+
+const palette = sectionPalettes.messages;
 
 function telUri(phone: string): string {
   return `tel:${phone.replace(/[^\d+]/g, '')}`;
@@ -63,7 +65,7 @@ export default function OrderMessagesScreen() {
   if (loading) {
     return (
       <ScreenScroll contentStyle={styles.content}>
-        <AppHeader back />
+        <AppHeader back section="messages" />
         <LoadingView label="Loading conversation…" />
       </ScreenScroll>
     );
@@ -71,9 +73,12 @@ export default function OrderMessagesScreen() {
 
   return (
     <ScreenScroll contentStyle={styles.content}>
-      <AppHeader back />
-      <Text style={styles.title}>Messages</Text>
-      <Text style={styles.subtitle}>Order {order?.order_number ?? orderId}</Text>
+      <AppHeader back section="messages" />
+      <SectionHero
+        section="messages"
+        title="Messages"
+        subtitle={`Order ${order?.order_number ?? orderId}`}
+      />
 
       {error ? <Banner message={error} /> : null}
 
@@ -102,21 +107,21 @@ export default function OrderMessagesScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32, gap: 12 },
-  title: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  subtitle: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
   contactCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
+    borderLeftWidth: 3,
+    borderLeftColor: palette.accent,
     borderRadius: radius.md,
     padding: 14,
   },
   contactCopy: { flex: 1, gap: 2 },
   contactDetail: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted },
-  contactName: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
-  contactPhone: { fontFamily: fonts.regular, fontSize: 13, color: colors.link },
+  contactName: { fontFamily: fonts.semibold, fontSize: 16, color: palette.ink },
+  contactPhone: { fontFamily: fonts.regular, fontSize: 13, color: palette.accent },
   footnote: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.muted },
 });

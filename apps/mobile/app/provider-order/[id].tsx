@@ -61,7 +61,7 @@ export default function ProviderOrderScreen() {
   if (!params.id) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back section="jobs" />
         <ErrorView
           title="Order unavailable"
           message="This order link is missing its ID."
@@ -72,7 +72,7 @@ export default function ProviderOrderScreen() {
   if (loading && !liveOrder) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back section="jobs" />
         <LoadingView label="Loading order…" />
       </Screen>
     );
@@ -80,7 +80,7 @@ export default function ProviderOrderScreen() {
   if (loadError && !liveOrder) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back section="jobs" />
         <ErrorView message={loadError} />
       </Screen>
     );
@@ -148,7 +148,7 @@ export default function ProviderOrderScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back section="jobs" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}

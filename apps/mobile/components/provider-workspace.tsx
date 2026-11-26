@@ -17,6 +17,7 @@ import {
   ErrorView,
   LoadingView,
   Screen,
+  SectionHero,
   SectionTitle,
   SettingRow,
   Toggle,
@@ -26,7 +27,13 @@ import { api, ApiError } from '../lib/api';
 import { formatDate, formatMoney, STATUS_LABELS } from '../lib/format';
 import { fonts } from '../lib/fonts';
 import { progressForStatus } from '../lib/order-status';
-import { colors, radius } from '../lib/theme';
+import {
+  colors,
+  radius,
+  sectionPalettes,
+  type AppSection,
+  type SectionPalette,
+} from '../lib/theme';
 import type { Quality } from '../lib/types';
 import type { MarketplaceOrder } from '../lib/marketplace-types';
 import { DAY_LABELS, PICKUP_DAYS, type ProviderProfile } from '../lib/provider-onboarding';
@@ -44,6 +51,12 @@ const SECTION_TITLES: Record<ProviderSection, string> = {
   dashboard: 'Dashboard',
   orders: 'Print jobs',
   settings: 'Shop settings',
+};
+
+const SECTION_PALETTES: Record<ProviderSection, AppSection> = {
+  dashboard: 'dashboard',
+  orders: 'jobs',
+  settings: 'shop',
 };
 
 type OrderFilter = 'all' | 'pending' | 'active' | 'done';
@@ -78,21 +91,32 @@ function hoursSummary(hours: ProviderProfile['hours']): string {
   return open.map((day) => DAY_LABELS[day].slice(0, 3)).join(', ');
 }
 
-export function ProviderHeader({ title }: { title: string }) {
+export function ProviderHeader({
+  title,
+  section = 'dashboard',
+}: {
+  title: string;
+  section?: ProviderSection;
+}) {
   const router = useRouter();
+  const palette = sectionPalettes[SECTION_PALETTES[section]];
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { backgroundColor: palette.ink }]}>
       <View style={styles.headerIdentity}>
-        <Text style={styles.headerBrand}>FORGE PROVIDER</Text>
-        <Text style={styles.headerTitle}>{title}</Text>
+        <Text style={[styles.headerBrand, { color: palette.soft }]}>FORGE PROVIDER</Text>
+        <Text style={[styles.headerTitle, { color: colors.secondary }]}>{title}</Text>
       </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Switch to customer mode"
         onPress={() => router.replace('/(tabs)' as never)}
-        style={({ pressed }) => [styles.modeButton, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.modeButton,
+          { backgroundColor: palette.accent },
+          pressed && styles.pressed,
+        ]}
       >
-        <Icon name={icons.swap} size={16} color={colors.bg} />
+        <Icon name={icons.swap} size={16} color={colors.secondary} />
         <Text style={styles.modeButtonText}>Customer mode</Text>
       </Pressable>
     </View>
@@ -184,10 +208,12 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
     router.push(`/provider-shop/${section}` as never);
   };
 
+  const palette = sectionPalettes[SECTION_PALETTES[section]];
+
   if (loading) {
     return (
       <Screen style={styles.screen}>
-        <ProviderHeader title={SECTION_TITLES[section]} />
+        <ProviderHeader title={SECTION_TITLES[section]} section={section} />
         <LoadingView label="Loading your shop…" />
       </Screen>
     );
@@ -196,7 +222,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
   if (error) {
     return (
       <Screen style={styles.screen}>
-        <ProviderHeader title={SECTION_TITLES[section]} />
+        <ProviderHeader title={SECTION_TITLES[section]} section={section} />
         <ErrorView message={error} onRetry={() => void load()} />
       </Screen>
     );
@@ -205,7 +231,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
   if (!provider) {
     return (
       <Screen style={styles.screen}>
-        <ProviderHeader title="Provider setup" />
+        <ProviderHeader title="Provider setup" section={section} />
         <View style={styles.emptyState}>
           <Badge label="Not set up" tone="warning" />
           <Text style={styles.pageTitle}>Become a provider</Text>
@@ -230,15 +256,20 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
           <RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.accent} />
         }
       >
-        <ProviderHeader title={SECTION_TITLES[section]} />
+        <ProviderHeader title={SECTION_TITLES[section]} section={section} />
 
-        <View style={styles.titleRow}>
-          <Text style={styles.pageTitle}>{SECTION_TITLES[section]}</Text>
-          <Badge label={statusLabel(provider)} tone={statusTone(provider)} />
-        </View>
-        <Text style={styles.subtitle}>
-          {provider.displayName} · {provider.type === 'LAB' ? 'Lab' : 'Individual maker'}
-        </Text>
+        <SectionHero
+          section={SECTION_PALETTES[section]}
+          title={SECTION_TITLES[section]}
+          subtitle={`${provider.displayName} · ${provider.type === 'LAB' ? 'Lab' : 'Individual maker'}`}
+          action={
+            <Badge
+              label={statusLabel(provider)}
+              tone={statusTone(provider)}
+              accent={palette.accent}
+            />
+          }
+        />
 
         {!provider.setup.canAppearInSearch ? (
           <Banner
@@ -252,6 +283,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
           <DashboardSection
             provider={provider}
             orders={orders}
+            palette={palette}
             onOpenOrder={openOrder}
             onUpdateStatus={(order, status) => void updateStatus(order, status)}
             onEditSetup={() => router.push('/provider-onboarding' as never)}
@@ -262,6 +294,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
         {section === 'orders' ? (
           <OrdersSection
             orders={orders}
+            palette={palette}
             onOpenOrder={openOrder}
             onUpdateStatus={(order, status) => void updateStatus(order, status)}
           />
@@ -269,6 +302,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
         {section === 'settings' ? (
           <SettingsSection
             provider={provider}
+            palette={palette}
             onEditSetup={() => router.push('/provider-onboarding' as never)}
             onQuickEdit={openQuickEdit}
             onAvailabilityChange={(isOpen) => void updateAvailability(isOpen)}
@@ -286,6 +320,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
 function DashboardSection({
   provider,
   orders,
+  palette,
   onOpenOrder,
   onUpdateStatus,
   onEditSetup,
@@ -294,6 +329,7 @@ function DashboardSection({
 }: {
   provider: ProviderProfile;
   orders: MarketplaceOrder[];
+  palette: SectionPalette;
   onOpenOrder: (order: MarketplaceOrder) => void;
   onUpdateStatus: (order: MarketplaceOrder, status: MarketplaceOrder['status']) => void;
   onEditSetup: () => void;
@@ -329,19 +365,19 @@ function DashboardSection({
       </View>
 
       <View style={styles.statsRow}>
-        <Card>
+        <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
           <Text style={styles.statLabel}>This month</Text>
           <Text style={styles.statValue}>{formatMoney(stats.revenue)}</Text>
           <Text style={styles.statDetail}>{stats.completed} completed jobs</Text>
         </Card>
-        <Card>
+        <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
           <Text style={styles.statLabel}>Turnaround</Text>
           <Text style={styles.statValue}>{provider.turnaroundDays}d</Text>
           <Text style={styles.statDetail}>{provider.maxActiveOrders} max active orders</Text>
         </Card>
       </View>
 
-      <Card>
+      <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
         <Text style={styles.cardTitle}>Your shop</Text>
         <Text style={styles.cardDetail}>
           {activePrinters} active printer{activePrinters === 1 ? '' : 's'} ·{' '}
@@ -387,10 +423,12 @@ function DashboardSection({
 
 function OrdersSection({
   orders,
+  palette,
   onOpenOrder,
   onUpdateStatus,
 }: {
   orders: MarketplaceOrder[];
+  palette: SectionPalette;
   onOpenOrder: (order: MarketplaceOrder) => void;
   onUpdateStatus: (order: MarketplaceOrder, status: MarketplaceOrder['status']) => void;
 }) {
@@ -427,7 +465,7 @@ function OrdersSection({
       </View>
 
       {filtered.length === 0 ? (
-        <Card>
+        <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
           <Text style={styles.cardTitle}>Nothing here yet</Text>
           <Text style={styles.cardDetail}>
             {filter === 'all'
@@ -542,11 +580,13 @@ function OrderCard({
 
 function SettingsSection({
   provider,
+  palette,
   onEditSetup,
   onQuickEdit,
   onAvailabilityChange,
 }: {
   provider: ProviderProfile;
+  palette: SectionPalette;
   onEditSetup: () => void;
   onQuickEdit: (section: ProviderShopSection) => void;
   onAvailabilityChange: (isOpen: boolean) => void;
@@ -555,7 +595,7 @@ function SettingsSection({
 
   return (
     <View style={styles.sectionGap}>
-      <Card>
+      <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
         <Text style={styles.cardTitle}>Quick edits</Text>
         <Text style={styles.cardDetail}>
           Change the things you use most without running the full setup again.
@@ -564,29 +604,33 @@ function SettingsSection({
           icon={icons.settings}
           title="Shop details & phone"
           detail={`${provider.displayName} · ${provider.contactPhone || 'No phone'}`}
+          accent={palette.accent}
           onPress={() => onQuickEdit('profile')}
         />
         <SettingRow
           icon={icons.locate}
           title="Pickup location"
           detail={provider.pickupArea || 'Not set'}
+          accent={palette.accent}
           onPress={() => onQuickEdit('location')}
         />
         <SettingRow
           icon={icons.clock}
           title="Open days & hours"
           detail={hoursSummary(provider.hours)}
+          accent={palette.accent}
           onPress={() => onQuickEdit('hours')}
         />
         <SettingRow
           icon={icons.printer}
           title="Printers"
           detail={`${activePrinters} active · ${provider.printers.length} total`}
+          accent={palette.accent}
           onPress={() => onQuickEdit('printers')}
         />
       </Card>
 
-      <Card>
+      <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
         <View style={styles.toggleRow}>
           <View style={styles.flex}>
             <Text style={styles.cardTitle}>Accepting new orders</Text>
@@ -599,7 +643,7 @@ function SettingsSection({
         </View>
       </Card>
 
-      <Card>
+      <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
         <Text style={styles.cardTitle}>Capacity</Text>
         <Text style={styles.cardDetail}>Turnaround: {provider.turnaroundDays} days</Text>
         <Text style={styles.cardDetail}>Max active orders: {provider.maxActiveOrders}</Text>
@@ -617,7 +661,7 @@ function SettingsSection({
           <Text style={styles.empty}>No printers have been added yet.</Text>
         ) : (
           provider.printers.map((printer) => (
-            <Card key={printer.id}>
+            <Card key={printer.id} accent={palette.accent} style={{ backgroundColor: palette.surface }}>
               <View style={styles.orderTop}>
                 <Text style={styles.cardTitle}>{printer.name}</Text>
                 <Badge
@@ -640,7 +684,7 @@ function SettingsSection({
         />
       </View>
 
-      <Card>
+      <Card accent={palette.accent} style={{ backgroundColor: palette.surface }}>
         <Text style={styles.cardTitle}>Full provider setup</Text>
         <Text style={styles.cardDetail}>
           Use the wizard for material rates, agreements, and a complete review of your shop.

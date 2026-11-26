@@ -16,7 +16,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon, icons, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
-import { colors, layout, radius, shadow, spacing } from '../lib/theme';
+import {
+  colors,
+  layout,
+  radius,
+  sectionPalettes,
+  shadow,
+  spacing,
+  type AppSection,
+} from '../lib/theme';
 
 const logo = require('../assets/forge-logo.png');
 
@@ -91,10 +99,21 @@ export function Divider({ tone = 'subtle' }: { tone?: 'subtle' | 'border' }) {
 
 /* ------------------------------------------------------------------ header */
 
-export function AppHeader({ back = false, compact = false }: { back?: boolean; compact?: boolean }) {
+export function AppHeader({
+  back = false,
+  compact = false,
+  section,
+}: {
+  back?: boolean;
+  compact?: boolean;
+  section?: AppSection;
+}) {
   const router = useRouter();
+  const sectionStyle: ViewStyle | null = section
+    ? { borderBottomWidth: 2, borderBottomColor: sectionPalettes[section].accent }
+    : null;
   return (
-    <View style={[styles.header, compact && styles.headerCompact]}>
+    <View style={[styles.header, compact && styles.headerCompact, sectionStyle]}>
       {back ? (
         <BackButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
       ) : (
@@ -192,16 +211,23 @@ export function Card({
   style,
   onPress,
   variant = 'outline',
+  accent,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
   onPress?: () => void;
   variant?: CardVariant;
+  /** Optional section tint on the left edge. */
+  accent?: string;
 }) {
+  const accentStyle: ViewStyle | null = accent
+    ? { borderLeftWidth: 3, borderLeftColor: accent }
+    : null;
   const cardStyle = [
     styles.card,
     variant === 'soft' && styles.cardSoft,
     variant === 'plain' && styles.cardPlain,
+    accentStyle,
     style,
   ];
 
@@ -217,6 +243,40 @@ export function Card({
     );
   }
   return <View style={cardStyle}>{children}</View>;
+}
+
+/** A section-tinted hero used to make dashboards feel distinct. */
+export function SectionHero({
+  section,
+  title,
+  subtitle,
+  action,
+}: {
+  section: AppSection;
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+}) {
+  const palette = sectionPalettes[section];
+  return (
+    <View
+      style={[
+        styles.sectionHero,
+        { backgroundColor: palette.soft, borderColor: palette.border },
+      ]}
+    >
+      <View style={[styles.sectionHeroStripe, { backgroundColor: palette.accent }]} />
+      <View style={styles.sectionHeroCopy}>
+        <Text style={[styles.sectionHeroTitle, { color: palette.ink }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[styles.sectionHeroSubtitle, { color: colors.muted }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {action ? <View style={styles.sectionHeroAction}>{action}</View> : null}
+    </View>
+  );
 }
 
 /** The soft blue form container used by the auth screens. */
@@ -443,19 +503,49 @@ const badgeTextColors: Record<BadgeTone, string> = {
   info: colors.link,
 };
 
-export function Badge({ label, tone = 'neutral' }: { label: string; tone?: BadgeTone }) {
+export function Badge({
+  label,
+  tone = 'neutral',
+  accent,
+}: {
+  label: string;
+  tone?: BadgeTone;
+  accent?: string;
+}) {
   return (
-    <View style={[styles.badge, badgeStyles[tone]]}>
-      <Text style={[styles.badgeText, { color: badgeTextColors[tone] }]}>{label}</Text>
+    <View
+      style={[
+        styles.badge,
+        badgeStyles[tone],
+        accent ? { borderWidth: 1, borderColor: accent } : null,
+      ]}
+    >
+      <Text style={[styles.badgeText, { color: accent ?? badgeTextColors[tone] }]}>
+        {label}
+      </Text>
     </View>
   );
 }
 
-export function ProgressBar({ value, height = 6 }: { value: number; height?: number }) {
+export function ProgressBar({
+  value,
+  height = 6,
+  accent,
+}: {
+  value: number;
+  height?: number;
+  accent?: string;
+}) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
     <View style={[styles.progressTrack, { height }]}>
-      <View style={[styles.progressFill, { width: `${clamped}%` }]} />
+      <View
+        style={[
+          styles.progressFill,
+          { width: `${clamped}%` },
+          accent ? { backgroundColor: accent } : null,
+        ]}
+      />
     </View>
   );
 }
@@ -466,12 +556,14 @@ export function SettingRow({
   detail,
   onPress,
   danger = false,
+  accent,
 }: {
   icon: IconName;
   title: string;
   detail?: string;
   onPress?: () => void;
   danger?: boolean;
+  accent?: string;
 }) {
   return (
     <Pressable
@@ -480,7 +572,7 @@ export function SettingRow({
       style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}
     >
       <View style={[styles.iconWell, danger && styles.iconWellDanger]}>
-        <Icon name={icon} size={18} color={danger ? colors.danger : colors.link} />
+        <Icon name={icon} size={18} color={danger ? colors.danger : accent ?? colors.link} />
       </View>
       <View style={styles.settingCopy}>
         <Text style={[styles.settingTitle, danger && { color: colors.danger }]}>{title}</Text>
@@ -690,6 +782,25 @@ const styles = StyleSheet.create({
 
   banner: { borderRadius: radius.md, padding: 12 },
   bannerText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7 },
+
+  sectionHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  sectionHeroStripe: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: radius.pill,
+  },
+  sectionHeroCopy: { flex: 1, gap: 3 },
+  sectionHeroTitle: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24 },
+  sectionHeroSubtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18 },
+  sectionHeroAction: { alignItems: 'flex-end' },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
 });

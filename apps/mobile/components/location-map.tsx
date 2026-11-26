@@ -5,8 +5,8 @@ import { colors, radius } from '../lib/theme';
 import type { LocationMapProps } from './location-map.types';
 
 /**
- * Web fallback. `react-native-maps` is a native module, so the manual coordinate
- * fields below the map remain the source of truth on web.
+ * Web fallback. `react-native-maps` is a native module; on web the selected
+ * point comes from the map picker's current value or the demo-location shortcut.
  */
 export default function LocationMap({ coordinate }: LocationMapProps) {
   return (
@@ -19,7 +19,7 @@ export default function LocationMap({ coordinate }: LocationMapProps) {
         Selected point: {coordinate.latitude.toFixed(5)}, {coordinate.longitude.toFixed(5)}
       </Text>
       <Text style={styles.detail}>
-        You can still edit the latitude and longitude fields on this screen.
+        Use the demo-location shortcut on this screen; the interactive map is available in the mobile app.
       </Text>
     </View>
   );

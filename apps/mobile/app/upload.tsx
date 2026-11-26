@@ -9,11 +9,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { AppHeader, Button, Screen } from "../components/ui";
+import { AppHeader, Button, Screen, SectionHero } from "../components/ui";
 import { api } from "../lib/api";
 import { fonts } from "../lib/fonts";
-import { colors, radius } from "../lib/theme";
+import { colors, radius, sectionPalettes } from "../lib/theme";
 
+const palette = sectionPalettes.configure;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_FORMATS = ["stl", "obj"] as const;
 
@@ -106,15 +107,16 @@ export default function UploadScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back section="configure" />
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Upload a 3D model</Text>
-        <Text style={styles.description}>
-          Select an STL or OBJ file. Files must be 50 MB or smaller.
-        </Text>
+        <SectionHero
+          section="configure"
+          title="Upload a 3D model"
+          subtitle="Select an STL or OBJ file. Files must be 50 MB or smaller."
+        />
 
         <Pressable
           accessibilityRole="button"
@@ -172,20 +174,13 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 16,
   },
-  title: { fontFamily: fonts.bold, fontSize: 24, color: colors.text },
-  description: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    lineHeight: 21,
-    color: colors.muted,
-  },
   drop: {
     minHeight: 190,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     borderStyle: "dashed",
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
@@ -193,14 +188,16 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.8 },
   disabled: { opacity: 0.65 },
-  icon: { fontSize: 38, lineHeight: 46, color: colors.accent },
-  dropTitle: { fontFamily: fonts.semibold, fontSize: 16, color: colors.text },
+  icon: { fontSize: 38, lineHeight: 46, color: palette.accent },
+  dropTitle: { fontFamily: fonts.semibold, fontSize: 16, color: palette.ink },
   dropDetail: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
   progressCard: {
     gap: 8,
     padding: 14,
     borderRadius: radius.md,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   progressLabel: { flexDirection: "row", justifyContent: "space-between" },
   progressText: {
