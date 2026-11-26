@@ -13,6 +13,7 @@ import {
   Vector3,
 } from 'three';
 import { colors } from '../../lib/theme';
+import { useReducedMotion } from '../../lib/use-reduced-motion';
 import type { ControlState } from './controls';
 import type { BoundingBox, LoadedModel } from './types';
 
@@ -34,6 +35,7 @@ export interface SceneProps {
 
 /** The 3D contents of the canvas — shared by the native and web wrappers. */
 export function ViewerScene({ model, progress, buildVolume, controls }: SceneProps) {
+  const reduceMotion = useReducedMotion();
   const cutHeight = useRef<number | null>(null);
 
   const { geometry, boundingBox } = model;
@@ -118,7 +120,9 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
     const { azimuth, polar, distance, target } = controls.current;
     CAMERA_TARGET.set(target.x, target.y, target.z);
     CAMERA_OFFSET.copy(camera.position).sub(CAMERA_TARGET);
-    const radius = MathUtils.damp(CAMERA_OFFSET.length(), distance, 8, delta);
+    const radius = reduceMotion
+      ? distance
+      : MathUtils.damp(CAMERA_OFFSET.length(), distance, 8, delta);
     camera.position.set(
       target.x + radius * Math.sin(polar) * Math.sin(azimuth),
       target.y + radius * Math.cos(polar),
@@ -128,7 +132,10 @@ export function ViewerScene({ model, progress, buildVolume, controls }: ScenePro
 
     if (progress === undefined) return;
     const cutTarget = -modelHeight / 2 + (MathUtils.clamp(progress, 0, 100) / 100) * modelHeight;
-    cutHeight.current = cutHeight.current === null ? cutTarget : MathUtils.damp(cutHeight.current, cutTarget, 6, delta);
+    cutHeight.current =
+      cutHeight.current === null || reduceMotion
+        ? cutTarget
+        : MathUtils.damp(cutHeight.current, cutTarget, 6, delta);
     CLIP_PLANE.constant = cutHeight.current;
     if (isComplete) return;
 

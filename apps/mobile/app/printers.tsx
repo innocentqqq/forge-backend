@@ -10,15 +10,18 @@ import {
 } from "react-native";
 import {
   AppHeader,
+  Badge,
   Button,
+  EmptyView,
   ErrorView,
   LoadingView,
   Screen,
+  SectionHero,
 } from "../components/ui";
 import { ProviderCard } from "../components/provider-card";
 import { api, USE_MOCK_API } from "../lib/api";
 import { fonts } from "../lib/fonts";
-import { colors, radius, shadow } from "../lib/theme";
+import { colors, radius, sectionPalettes, shadow } from "../lib/theme";
 import {
   MATERIALS,
   QUALITIES,
@@ -33,6 +36,8 @@ const SORTS: { key: Sort; label: string }[] = [
   { key: "cheapest", label: "Cheapest" },
   { key: "fastest", label: "Fastest" },
 ];
+
+const palette = sectionPalettes.providers;
 
 export default function ProvidersScreen() {
   const router = useRouter();
@@ -134,7 +139,7 @@ export default function ProvidersScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back section="providers" />
       {loading && providers.length === 0 ? (
         <LoadingView label="Finding providers…" />
       ) : error && providers.length === 0 ? (
@@ -148,11 +153,16 @@ export default function ProvidersScreen() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={() => void load(true)}
-                tintColor={colors.accent}
+                tintColor={palette.accent}
               />
             }
           >
-            <Text style={styles.title}>Choose a provider</Text>
+            <SectionHero
+              section="providers"
+              title="Choose a provider"
+              subtitle="Compare price, distance, and availability for your model."
+              action={<Badge label={`${providers.length} found`} accent={palette.accent} />}
+            />
             <View style={styles.sortRow}>
               {SORTS.map((option) => (
                 <Pressable
@@ -216,9 +226,10 @@ export default function ProvidersScreen() {
               />
             ))}
             {!loading && providers.length === 0 ? (
-              <Text style={styles.empty}>
-                No providers are available for this model and material.
-              </Text>
+              <EmptyView
+                title="No matching providers"
+                message="Try a different material, or upload a smaller model to see more makers."
+              />
             ) : null}
             {placeError ? (
               <Text accessibilityRole="alert" style={styles.error}>
@@ -254,42 +265,45 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     gap: 12,
   },
-  title: { fontFamily: fonts.bold, fontSize: 22, color: colors.text },
   sortRow: { flexDirection: "row", gap: 8 },
   chip: {
     flex: 1,
     minHeight: 36,
     borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  chipActive: { backgroundColor: colors.accent },
-  chipText: { fontFamily: fonts.regular, fontSize: 13, color: colors.text },
+  chipActive: { backgroundColor: palette.accent, borderColor: palette.accent },
+  chipText: { fontFamily: fonts.regular, fontSize: 13, color: palette.ink },
   chipTextActive: { fontFamily: fonts.semibold, color: "#FFFFFF" },
   filterCard: {
     padding: 12,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     gap: 8,
   },
-  filterLabel: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  filterLabel: { fontFamily: fonts.semibold, fontSize: 13, color: palette.ink },
   materialRow: { flexDirection: "row", gap: 8 },
   material: {
     borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  materialSelected: { backgroundColor: "#DDE5FF" },
+  materialSelected: { backgroundColor: palette.surface, borderColor: palette.accent },
   materialText: {
     color: colors.muted,
     fontFamily: fonts.regular,
     fontSize: 12,
   },
-  materialTextSelected: { color: colors.text, fontFamily: fonts.bold },
+  materialTextSelected: { color: palette.ink, fontFamily: fonts.bold },
   card: {
     padding: 14,
     gap: 7,

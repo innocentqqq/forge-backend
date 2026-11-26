@@ -64,7 +64,7 @@ function validateStep(step: number, draft: ProviderDraft): string | null {
       return 'Individual providers must add their exact private pickup address.';
     }
     if (Boolean(draft.latitude.trim()) !== Boolean(draft.longitude.trim())) {
-      return 'Enter both latitude and longitude, or leave both blank.';
+      return 'Choose a pickup point on the map to set both coordinates.';
     }
     if (Boolean(draft.exactLatitude.trim()) !== Boolean(draft.exactLongitude.trim())) {
       return 'Enter both exact latitude and exact longitude, or leave both blank.';
@@ -202,7 +202,7 @@ export default function ProviderOnboardingScreen() {
   if (loading) {
     return (
       <Screen>
-        <AppHeader back />
+        <AppHeader back section="shop" />
         <LoadingView label="Loading provider setup…" />
       </Screen>
     );
@@ -219,7 +219,7 @@ export default function ProviderOnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <AppHeader back />
+          <AppHeader back section="shop" />
           <View style={styles.titleRow}>
             <Text style={styles.pageTitle}>Become a provider</Text>
             <Badge label={`Step ${step + 1} of ${STEPS.length}`} tone="info" />
@@ -322,6 +322,7 @@ function TypeStep({ draft, patch }: StepProps) {
           <Pressable
             key={option.type}
             accessibilityRole="radio"
+            accessibilityLabel={option.title}
             accessibilityState={{ selected }}
             onPress={() => patch({ type: option.type })}
             style={[styles.optionCard, selected && styles.optionCardSelected]}
@@ -436,30 +437,21 @@ function BasicsStep({ draft, patch }: StepProps) {
           />
         )}
 
-        <View style={styles.locationRow}>
-          <View style={styles.flex}>
-            <FilledField
-              label="Public latitude"
-              value={draft.latitude}
-              onChangeText={(value) => patch({ latitude: value })}
-              placeholder="13.8708"
-              keyboardType="decimal-pad"
-            />
-          </View>
-          <View style={styles.flex}>
-            <FilledField
-              label="Public longitude"
-              value={draft.longitude}
-              onChangeText={(value) => patch({ longitude: value })}
-              placeholder="100.6053"
-              keyboardType="decimal-pad"
-            />
-          </View>
-        </View>
+        <Text style={styles.finePrint}>
+          {draft.type === 'INDIVIDUAL'
+            ? 'The public search point is set automatically from the private pin.'
+            : 'The public pickup point is set from the map.'}
+        </Text>
         <Button
           title="Use demo location (Bangkok)"
           variant="ghost"
-          onPress={() => patch({ latitude: DEMO_LOCATION.lat, longitude: DEMO_LOCATION.lng })}
+          onPress={() =>
+            patch(
+              draft.type === 'INDIVIDUAL'
+                ? privatePointPatch(Number(DEMO_LOCATION.lat), Number(DEMO_LOCATION.lng))
+                : { latitude: String(DEMO_LOCATION.lat), longitude: String(DEMO_LOCATION.lng) },
+            )
+          }
         />
         {draft.type === 'INDIVIDUAL' ? (
           <>
@@ -601,6 +593,7 @@ function PrintersStep({ draft, patch }: StepProps) {
             <Toggle
               value={printer.isActive ?? true}
               onValueChange={(value) => updatePrinter(index, { isActive: value })}
+              accessibilityLabel={`Printer ${index + 1} available for orders`}
             />
           </View>
         </Card>
@@ -702,7 +695,11 @@ function AvailabilityStep({ draft, patch }: StepProps) {
             <Text style={styles.cardTitle}>Accepting orders</Text>
             <Text style={styles.cardDetail}>Turn this off to pause new jobs.</Text>
           </View>
-          <Toggle value={draft.isOpen} onValueChange={(value) => patch({ isOpen: value })} />
+          <Toggle
+            value={draft.isOpen}
+            onValueChange={(value) => patch({ isOpen: value })}
+            accessibilityLabel="Accepting orders"
+          />
         </View>
         <FilledField
           label="Turnaround (days)"
@@ -734,6 +731,7 @@ function AvailabilityStep({ draft, patch }: StepProps) {
                 <Text style={styles.dayLabel}>{DAY_LABELS[day]}</Text>
                 <Toggle
                   value={Boolean(range)}
+                  accessibilityLabel={`Open for pickup on ${DAY_LABELS[day]}`}
                   onValueChange={(enabled) =>
                     patch({
                       hours: {
@@ -855,6 +853,7 @@ function ReviewStep({
           <Pressable
             key={agreement.key}
             accessibilityRole="checkbox"
+            accessibilityLabel={agreement.title}
             accessibilityState={{ checked: draft.agreements[agreement.key] }}
             onPress={() => toggleAgreement(agreement.key)}
             style={styles.agreementRow}

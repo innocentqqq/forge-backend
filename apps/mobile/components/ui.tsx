@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   ActivityIndicator,
+  type AccessibilityState,
   Image,
   Pressable,
   RefreshControl,
@@ -10,15 +11,30 @@ import {
   Text,
   TextInput,
   type TextInputProps,
+  type TextStyle,
   View,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon, icons, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
-import { colors, layout, radius, shadow, spacing } from '../lib/theme';
+import {
+  colors,
+  layout,
+  radius,
+  sectionPalettes,
+  shadow,
+  spacing,
+  touchTarget,
+  type AppSection,
+} from '../lib/theme';
 
 const logo = require('../assets/forge-logo.png');
+
+/** Keeps prices, counters and progress values from shifting as digits change. */
+export const tabularFigures: TextStyle = {
+  fontVariant: ['tabular-nums'],
+};
 
 /* ------------------------------------------------------------------ layout */
 
@@ -91,10 +107,21 @@ export function Divider({ tone = 'subtle' }: { tone?: 'subtle' | 'border' }) {
 
 /* ------------------------------------------------------------------ header */
 
-export function AppHeader({ back = false, compact = false }: { back?: boolean; compact?: boolean }) {
+export function AppHeader({
+  back = false,
+  compact = false,
+  section,
+}: {
+  back?: boolean;
+  compact?: boolean;
+  section?: AppSection;
+}) {
   const router = useRouter();
+  const sectionStyle: ViewStyle | null = section
+    ? { borderBottomWidth: 2, borderBottomColor: sectionPalettes[section].accent }
+    : null;
   return (
-    <View style={[styles.header, compact && styles.headerCompact]}>
+    <View style={[styles.header, compact && styles.headerCompact, sectionStyle]}>
       {back ? (
         <BackButton onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
       ) : (
@@ -115,7 +142,9 @@ export function BackButton({ onPress }: { onPress?: () => void }) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Go back"
+      accessibilityHint="Returns to the previous screen"
       onPress={onPress}
+      hitSlop={spacing.sm}
       style={({ pressed }) => [styles.back, pressed && styles.pressed]}
     >
       <Icon name={icons.chevronBack} size={24} color={colors.text} />
@@ -175,9 +204,22 @@ export function Label({ children, style }: { children: React.ReactNode; style?: 
   return <Text style={[styles.label, style]}>{children}</Text>;
 }
 
-export function LinkText({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) {
+export function LinkText({
+  children,
+  onPress,
+  accessibilityLabel,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
   return (
-    <Text accessibilityRole="link" onPress={onPress} style={styles.link}>
+    <Text
+      accessibilityRole="link"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={[styles.link, styles.linkTarget]}
+    >
       {children}
     </Text>
   );
@@ -192,16 +234,27 @@ export function Card({
   style,
   onPress,
   variant = 'outline',
+  accent,
+  accessibilityLabel,
+  accessibilityState,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
   onPress?: () => void;
   variant?: CardVariant;
+  /** Optional section tint on the left edge. */
+  accent?: string;
+  accessibilityLabel?: string;
+  accessibilityState?: AccessibilityState;
 }) {
+  const accentStyle: ViewStyle | null = accent
+    ? { borderLeftWidth: 3, borderLeftColor: accent }
+    : null;
   const cardStyle = [
     styles.card,
     variant === 'soft' && styles.cardSoft,
     variant === 'plain' && styles.cardPlain,
+    accentStyle,
     style,
   ];
 
@@ -210,6 +263,8 @@ export function Card({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={accessibilityState}
         style={({ pressed }) => [cardStyle, pressed && styles.pressed]}
       >
         {children}
@@ -217,6 +272,40 @@ export function Card({
     );
   }
   return <View style={cardStyle}>{children}</View>;
+}
+
+/** A section-tinted hero used to make dashboards feel distinct. */
+export function SectionHero({
+  section,
+  title,
+  subtitle,
+  action,
+}: {
+  section: AppSection;
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+}) {
+  const palette = sectionPalettes[section];
+  return (
+    <View
+      style={[
+        styles.sectionHero,
+        { backgroundColor: palette.soft, borderColor: palette.border },
+      ]}
+    >
+      <View style={[styles.sectionHeroStripe, { backgroundColor: palette.accent }]} />
+      <View style={styles.sectionHeroCopy}>
+        <Text style={[styles.sectionHeroTitle, { color: palette.ink }]}>{title}</Text>
+        {subtitle ? (
+          <Text style={[styles.sectionHeroSubtitle, { color: colors.muted }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {action ? <View style={styles.sectionHeroAction}>{action}</View> : null}
+    </View>
+  );
 }
 
 /** The soft blue form container used by the auth screens. */
@@ -243,6 +332,7 @@ export function Button({
   loading,
   disabled,
   style,
+  accessibilityLabel,
 }: {
   title: string;
   onPress: () => void;
@@ -252,6 +342,7 @@ export function Button({
   loading?: boolean;
   disabled?: boolean;
   style?: ViewStyle;
+  accessibilityLabel?: string;
 }) {
   const isDisabled = disabled || loading;
   const resolvedSize = size ?? (variant === 'secondary' || variant === 'ghost' ? 'sm' : 'md');
@@ -261,6 +352,8 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={onPress}
       disabled={isDisabled}
       style={({ pressed }) => [
@@ -274,7 +367,7 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? '#FFFFFF' : colors.link} />
+        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? colors.onAccent : colors.link} />
       ) : (
         <Text style={[styles.buttonText, smallLabel ? styles.buttonTextSm : styles.buttonTextMd, buttonTextStyles[variant]]}>
           {title}
@@ -294,20 +387,34 @@ export function TextField({
 }: TextInputProps & { label?: string; hint?: string; icon?: IconName }) {
   const [hidden, setHidden] = useState(Boolean(props.secureTextEntry));
   const isSecure = Boolean(props.secureTextEntry);
+  const labelId = useId();
+  const constrainedInput =
+    isSecure ||
+    props.keyboardType === 'email-address' ||
+    props.keyboardType === 'number-pad' ||
+    props.keyboardType === 'decimal-pad' ||
+    props.keyboardType === 'numeric';
 
   return (
     <View style={styles.field}>
-      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      {label ? <Text nativeID={labelId} style={styles.fieldLabel}>{label}</Text> : null}
       <View style={[styles.input, props.multiline && styles.inputMultiline]}>
         {icon ? <Icon name={icon} size={20} color={colors.muted} /> : null}
         <TextInput
           placeholderTextColor={colors.muted}
           {...props}
+          accessibilityLabel={props.accessibilityLabel ?? label ?? props.placeholder}
+          accessibilityHint={props.accessibilityHint ?? hint}
+          accessibilityLabelledBy={label ? props.nativeID ?? labelId : undefined}
+          autoCorrect={props.autoCorrect ?? (constrainedInput ? false : undefined)}
+          autoCapitalize={
+            props.autoCapitalize ?? (isSecure ? 'none' : undefined)
+          }
           secureTextEntry={isSecure ? hidden : undefined}
           style={[styles.inputText, props.multiline && styles.inputTextMultiline, props.style]}
         />
         {isSecure ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={hidden ? 'Show password' : 'Hide password'} onPress={() => setHidden((v) => !v)} hitSlop={8}>
+          <Pressable accessibilityRole="button" accessibilityLabel={hidden ? 'Show password' : 'Hide password'} onPress={() => setHidden((v) => !v)} hitSlop={spacing.md}>
             <Icon name={hidden ? icons.eyeOff : icons.eye} size={20} color={colors.muted} />
           </Pressable>
         ) : null}
@@ -331,15 +438,26 @@ export function FilledField({
   placeholder?: string;
   keyboardType?: TextInputProps['keyboardType'];
 }) {
+  const labelId = useId();
+  const constrainedInput =
+    keyboardType === 'number-pad' ||
+    keyboardType === 'decimal-pad' ||
+    keyboardType === 'numeric' ||
+    /email|password|url|link/i.test(label);
+
   return (
     <View style={styles.filled}>
-      <Text style={styles.filledLabel}>{label}</Text>
+      <Text nativeID={labelId} style={styles.filledLabel}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
         keyboardType={keyboardType}
+        accessibilityLabel={label}
+        accessibilityLabelledBy={labelId}
+        autoCorrect={!constrainedInput}
+        autoCapitalize={constrainedInput ? 'none' : undefined}
         style={styles.filledInput}
       />
     </View>
@@ -371,17 +489,21 @@ export function Toggle({
   value,
   onValueChange,
   disabled,
+  accessibilityLabel,
 }: {
   value: boolean;
   onValueChange: (value: boolean) => void;
   disabled?: boolean;
+  accessibilityLabel?: string;
 }) {
   return (
     <Pressable
       accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked: value, disabled }}
       disabled={disabled}
       onPress={() => onValueChange(!value)}
+      hitSlop={10}
       style={[styles.toggle, value ? styles.toggleOn : styles.toggleOff, disabled && styles.disabled]}
     >
       <View style={[styles.knob, value ? styles.knobOn : styles.knobOff]} />
@@ -389,17 +511,40 @@ export function Toggle({
   );
 }
 
-export function Radio({ selected, onPress }: { selected: boolean; onPress?: () => void }) {
+export function Radio({
+  selected,
+  onPress,
+  accessibilityLabel,
+}: {
+  selected: boolean;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
+  const visual = selected ? (
+    <>
+      <View style={styles.radioFill} />
+      <View style={styles.radioDot} />
+    </>
+  ) : (
+    <View style={styles.radioEmpty} />
+  );
+
+  // Inside a labelled row the parent owns the interaction; render only the
+  // visual so screen readers do not find a second, unnamed radio control.
+  if (!onPress) {
+    return <View style={styles.radio}>{visual}</View>;
+  }
+
   return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ selected }} onPress={onPress} style={styles.radio}>
-      {selected ? (
-        <>
-          <View style={styles.radioFill} />
-          <View style={styles.radioDot} />
-        </>
-      ) : (
-        <View style={styles.radioEmpty} />
-      )}
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      hitSlop={12}
+      style={styles.radio}
+    >
+      {visual}
     </Pressable>
   );
 }
@@ -443,19 +588,54 @@ const badgeTextColors: Record<BadgeTone, string> = {
   info: colors.link,
 };
 
-export function Badge({ label, tone = 'neutral' }: { label: string; tone?: BadgeTone }) {
+export function Badge({
+  label,
+  tone = 'neutral',
+  accent,
+}: {
+  label: string;
+  tone?: BadgeTone;
+  accent?: string;
+}) {
   return (
-    <View style={[styles.badge, badgeStyles[tone]]}>
-      <Text style={[styles.badgeText, { color: badgeTextColors[tone] }]}>{label}</Text>
+    <View
+      style={[
+        styles.badge,
+        badgeStyles[tone],
+        accent ? { borderWidth: 1, borderColor: accent } : null,
+      ]}
+    >
+      <Text style={[styles.badgeText, { color: accent ?? badgeTextColors[tone] }]}>
+        {label}
+      </Text>
     </View>
   );
 }
 
-export function ProgressBar({ value, height = 6 }: { value: number; height?: number }) {
+export function ProgressBar({
+  value,
+  height = 6,
+  accent,
+}: {
+  value: number;
+  height?: number;
+  accent?: string;
+}) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
-    <View style={[styles.progressTrack, { height }]}>
-      <View style={[styles.progressFill, { width: `${clamped}%` }]} />
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel={`Build progress: ${clamped}%`}
+      accessibilityValue={{ min: 0, max: 100, now: clamped, text: `${clamped}%` }}
+      style={[styles.progressTrack, { height }]}
+    >
+      <View
+        style={[
+          styles.progressFill,
+          { width: `${clamped}%` },
+          accent ? { backgroundColor: accent } : null,
+        ]}
+      />
     </View>
   );
 }
@@ -466,21 +646,28 @@ export function SettingRow({
   detail,
   onPress,
   danger = false,
+  accent,
 }: {
   icon: IconName;
   title: string;
   detail?: string;
   onPress?: () => void;
   danger?: boolean;
+  accent?: string;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={detail}
+      accessibilityState={{ disabled: !onPress }}
+      disabled={!onPress}
       onPress={onPress}
+      hitSlop={spacing.xs}
       style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}
     >
       <View style={[styles.iconWell, danger && styles.iconWellDanger]}>
-        <Icon name={icon} size={18} color={danger ? colors.danger : colors.link} />
+        <Icon name={icon} size={18} color={danger ? colors.danger : accent ?? colors.link} />
       </View>
       <View style={styles.settingCopy}>
         <Text style={[styles.settingTitle, danger && { color: colors.danger }]}>{title}</Text>
@@ -493,7 +680,10 @@ export function SettingRow({
 
 export function Banner({ message, tone = 'danger' }: { message: string; tone?: BadgeTone }) {
   return (
-    <View style={[styles.banner, badgeStyles[tone]]}>
+    <View
+      accessibilityRole={tone === 'danger' ? 'alert' : undefined}
+      style={[styles.banner, badgeStyles[tone]]}
+    >
       <Text style={[styles.bannerText, { color: badgeTextColors[tone] }]}>{message}</Text>
     </View>
   );
@@ -511,14 +701,14 @@ export function LoadingView({ label = 'Loading…' }: { label?: string }) {
 export function ErrorView({
   message,
   onRetry,
-  title = 'Something went wrong',
+  title = 'Unable to load this screen',
 }: {
   message: string;
   onRetry?: () => void;
   title?: string;
 }) {
   return (
-    <View style={styles.center}>
+    <View style={styles.center} accessibilityRole="alert">
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={[styles.body, styles.muted, styles.centerText]}>{message}</Text>
       {onRetry ? <Button title="Try again" variant="secondary" onPress={onRetry} /> : null}
@@ -526,11 +716,20 @@ export function ErrorView({
   );
 }
 
-export function EmptyView({ title, message }: { title: string; message?: string }) {
+export function EmptyView({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <View style={styles.center}>
       <Text style={styles.cardTitle}>{title}</Text>
       {message ? <Text style={[styles.body, styles.muted, styles.centerText]}>{message}</Text> : null}
+      {action}
     </View>
   );
 }
@@ -561,18 +760,19 @@ const styles = StyleSheet.create({
   logo: { width: 69, height: 70 },
   logoCompact: { width: 58, height: 59 },
   brand: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  back: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  back: { width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
 
-  heroTitle: { fontFamily: fonts.bold, fontSize: 32, lineHeight: 38.7, color: colors.text },
+  heroTitle: { fontFamily: fonts.bold, fontSize: 32, lineHeight: 38.4, color: colors.text },
   pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
-  sectionTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  subtitle: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23.2, color: colors.muted },
-  body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  cardTitle: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  subtitle: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.muted },
+  body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.text },
   muted: { color: colors.muted },
-  caption: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  label: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.text },
-  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.link },
+  caption: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  label: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.text },
+  link: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.link },
+  linkTarget: { minHeight: touchTarget },
   centerText: { textAlign: 'center' },
 
   card: {
@@ -602,14 +802,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.sm,
   },
-  buttonMd: { height: 52, paddingHorizontal: 24 },
-  buttonSm: { height: 36, paddingHorizontal: 12 },
+  buttonMd: { minHeight: 52, paddingHorizontal: 24 },
+  buttonSm: { minHeight: touchTarget, paddingHorizontal: 12 },
   buttonText: { textAlign: 'center' },
-  buttonTextMd: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4 },
-  buttonTextSm: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7 },
+  buttonTextMd: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8 },
+  buttonTextSm: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2 },
 
   field: { gap: 8 },
-  fieldLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  fieldLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.text },
   input: {
     height: 52,
     flexDirection: 'row',
@@ -622,30 +822,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   inputMultiline: { height: undefined, minHeight: 96, alignItems: 'flex-start', paddingVertical: 12 },
-  inputText: { flex: 1, fontFamily: fonts.regular, fontSize: 16, lineHeight: 19.4, color: colors.text, padding: 0 },
+  inputText: { flex: 1, fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.text, padding: 0 },
   inputTextMultiline: { minHeight: 72, textAlignVertical: 'top' },
   hint: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
 
   filled: { backgroundColor: colors.surfaceSubtle, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 8, gap: 2 },
-  filledLabel: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
-  filledInput: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23.2, color: colors.text, padding: 0 },
+  filledLabel: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
+  filledInput: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.text, padding: 0 },
 
-  chip: { height: 30, paddingHorizontal: 12, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  chip: { minHeight: touchTarget, paddingHorizontal: 12, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   chipIdle: { backgroundColor: colors.surfaceSubtle, borderWidth: 1, borderColor: colors.border },
   chipActive: { backgroundColor: colors.accent },
-  chipText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.muted },
-  chipTextActive: { color: '#FFFFFF' },
+  chipText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  chipTextActive: { color: colors.onAccent },
 
   toggle: { width: 44, height: 26, borderRadius: radius.pill, padding: 2, justifyContent: 'center' },
   toggleOn: { backgroundColor: colors.accent, alignItems: 'flex-end' },
   toggleOff: { backgroundColor: colors.track, alignItems: 'flex-start' },
-  knob: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: '#FFFFFF' },
+  knob: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: colors.onAccent },
   knobOn: {},
   knobOff: {},
 
   radio: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   radioFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: radius.pill, backgroundColor: colors.accent },
-  radioDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: '#FFFFFF' },
+  radioDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colors.onAccent },
   radioEmpty: {
     width: 20,
     height: 20,
@@ -666,10 +866,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   statusDot: { width: 8, height: 8, borderRadius: radius.pill },
-  statusText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  statusText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.text },
 
   badge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
-  badgeText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 13.3 },
+  badgeText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16.8, ...tabularFigures },
 
   progressTrack: { borderRadius: radius.pill, backgroundColor: colors.track, overflow: 'hidden', width: '100%' },
   progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.accent },
@@ -685,11 +885,30 @@ const styles = StyleSheet.create({
   },
   iconWellDanger: { backgroundColor: colors.dangerSoft },
   settingCopy: { flex: 1, gap: 2 },
-  settingTitle: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 16.9, color: colors.text },
-  settingDetail: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 13.3, color: colors.muted },
+  settingTitle: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 20, color: colors.text },
+  settingDetail: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
 
   banner: { borderRadius: radius.md, padding: 12 },
-  bannerText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7 },
+  bannerText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2 },
+
+  sectionHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  sectionHeroStripe: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: radius.pill,
+  },
+  sectionHeroCopy: { flex: 1, gap: 3 },
+  sectionHeroTitle: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24 },
+  sectionHeroSubtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2 },
+  sectionHeroAction: { alignItems: 'flex-end' },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
 });
@@ -702,8 +921,8 @@ const buttonStyles = StyleSheet.create<Record<ButtonVariant, ViewStyle>>({
 });
 
 const buttonTextStyles = StyleSheet.create<Record<ButtonVariant, { color: string }>>({
-  primary: { color: '#FFFFFF' },
+  primary: { color: colors.onAccent },
   secondary: { color: colors.link },
   ghost: { color: colors.text },
-  danger: { color: '#FFFFFF' },
+  danger: { color: colors.onAccent },
 });

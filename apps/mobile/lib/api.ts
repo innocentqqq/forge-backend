@@ -715,13 +715,13 @@ export const api = {
       if (!upload)
         throw new ApiError(
           "UPLOAD_NOT_FOUND",
-          "Upload session expired. Please select the file again.",
+          "Upload session expired. Select the file again.",
           404,
         );
       if (!upload.localUri) {
         throw new ApiError(
           "UPLOAD_SOURCE_MISSING",
-          "The selected file is no longer available. Please choose it again.",
+          "The selected file is no longer available. Choose it again.",
           400,
         );
       }

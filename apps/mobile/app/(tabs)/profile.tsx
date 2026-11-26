@@ -1,20 +1,23 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   AppHeader,
   Button,
   ErrorView,
   LoadingView,
   Screen,
+  SectionHero,
   SettingRow,
 } from "../../components/ui";
 import { icons, type IconName } from "../../components/icons";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { fonts } from "../../lib/fonts";
-import { colors, radius, shadow } from "../../lib/theme";
+import { colors, radius, sectionPalettes, shadow } from "../../lib/theme";
 import type { Profile, ProfileStats } from "../../lib/types";
+
+const palette = sectionPalettes.profile;
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -48,6 +51,13 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  const confirmSignOut = () => {
+    Alert.alert("Log out?", "You will need to sign in again to place or manage orders.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log out", style: "destructive", onPress: () => void signOut() },
+    ]);
+  };
+
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -57,14 +67,14 @@ export default function ProfileScreen() {
   if (loading)
     return (
       <Screen>
-        <AppHeader compact />
+        <AppHeader compact section="profile" />
         <LoadingView label="Loading profile…" />
       </Screen>
     );
   if (error || !profile) {
     return (
       <Screen>
-        <AppHeader compact />
+        <AppHeader compact section="profile" />
         <ErrorView
           message={error || "Profile unavailable"}
           onRetry={() => void load()}
@@ -84,23 +94,27 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <AppHeader compact />
+      <AppHeader compact section="profile" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>Profile</Text>
-          <Pressable
-            onPress={() => router.push("/edit-profile")}
-            style={({ pressed }) => [
-              styles.editPill,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.editPillText}>Edit profile</Text>
-          </Pressable>
-        </View>
+        <SectionHero
+          section="profile"
+          title="Your profile"
+          subtitle="Details, preferences, and maker mode."
+          action={
+            <Pressable
+              onPress={() => router.push("/edit-profile")}
+              style={({ pressed }) => [
+                styles.editPill,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.editPillText}>Edit profile</Text>
+            </Pressable>
+          }
+        />
 
         <View style={styles.summary}>
           <View style={styles.avatar}>
@@ -165,7 +179,7 @@ export default function ProfileScreen() {
               title: "Log out",
               detail: undefined,
               danger: true,
-              onPress: () => void signOut(),
+              onPress: confirmSignOut,
             },
           ]}
         />
@@ -225,6 +239,7 @@ function Section({ title, rows }: { title: string; rows: Row[] }) {
               title={row.title}
               detail={row.detail}
               danger={row.danger}
+              accent={row.danger ? undefined : palette.accent}
               onPress={row.onPress ?? (() => router.push(row.to as never))}
             />
           </React.Fragment>
@@ -238,19 +253,10 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, gap: 12 },
   pressed: { opacity: 0.85 },
 
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  title: {
-    fontFamily: fonts.bold,
-    fontSize: 24,
-    lineHeight: 29,
-    color: colors.text,
-  },
   editPill: {
-    backgroundColor: colors.surfaceSubtle,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -259,11 +265,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     lineHeight: 15.7,
-    color: colors.link,
+    color: palette.accent,
   },
 
   summary: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: palette.soft,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radius.md,
     padding: 14,
     flexDirection: "row",
@@ -283,7 +291,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.extrabold,
     fontSize: 20,
     lineHeight: 24.2,
-    color: colors.text,
+    color: palette.accent,
   },
   summaryCopy: { flex: 1, gap: 3 },
   name: {
@@ -302,7 +310,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 11,
     lineHeight: 13.3,
-    color: colors.link,
+    color: palette.accent,
   },
 
   section: { gap: 6 },
@@ -310,12 +318,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     lineHeight: 15.7,
-    color: colors.text,
+    color: palette.ink,
   },
   sectionCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 2,
@@ -323,9 +331,11 @@ const styles = StyleSheet.create({
   rowDivider: { height: 1, backgroundColor: colors.surfaceSubtle },
 
   maker: {
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: palette.border,
+    borderLeftWidth: 3,
+    borderLeftColor: palette.accent,
     borderRadius: radius.md,
     padding: 14,
     gap: 8,
@@ -334,7 +344,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 16,
     lineHeight: 19.4,
-    color: colors.text,
+    color: palette.ink,
   },
   makerCopy: {
     fontFamily: fonts.regular,

@@ -49,6 +49,7 @@ function RootNavigator() {
       <Stack.Screen name="auth/success" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="provider" options={{ headerShown: false }} />
+      <Stack.Screen name="provider-shop/[section]" options={{ headerShown: false }} />
       <Stack.Screen name="printer/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="provider-onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="security" options={{ headerShown: false }} />

@@ -113,7 +113,7 @@ function SettingToggleRow({
         <Text style={styles.label}>{label}</Text>
         <Text style={styles.detail}>{detail}</Text>
       </View>
-      <Toggle value={value} onValueChange={onChange} />
+      <Toggle value={value} onValueChange={onChange} accessibilityLabel={label} />
     </View>
   );
 }

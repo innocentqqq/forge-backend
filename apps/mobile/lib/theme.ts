@@ -1,37 +1,149 @@
 /**
- * Design tokens extracted from the Forge Figma file
- * (https://www.figma.com/design/wuPOYlLv4xHVuTLjxeUQPD/Forge).
+ * Forge design tokens.
  *
- * Every colour, radius and shadow below is taken from the Figma node tree, so
- * screens should always reference these instead of hard-coding values.
+ * Brand colours are fixed: primary #4052D6, secondary #FFFFFF, tertiary
+ * #36454F. Each app section also gets a tinted palette so a screen has its own
+ * visual identity without drifting away from the brand.
  */
+
+export const brand = {
+  primary: '#4052D6',
+  secondary: '#FFFFFF',
+  tertiary: '#36454F',
+} as const;
 
 export const colors = {
   /** Page background. */
-  bg: '#FFFFFF',
-  surface: '#FFFFFF',
+  bg: brand.secondary,
+  secondary: brand.secondary,
+  tertiary: brand.tertiary,
+  surface: brand.secondary,
   /** Default 1px card / input border. */
-  border: '#AABCE2',
+  border: '#D8DDF5',
   /** Primary copy. */
-  text: '#10131A',
+  text: brand.tertiary,
   /** Secondary copy. */
-  muted: '#596273',
-  /** Primary action blue. */
-  accent: '#4E80FF',
-  /** The soft blue panels, cards and tab bar. */
-  accentSoft: '#C0CFEE',
+  muted: '#6B7280',
+  /** Primary action colour. */
+  accent: brand.primary,
+  /** Soft panels, cards and tab bars. */
+  accentSoft: '#E9EBFB',
   /** Tinted surface used for chips, icon wells and status pills. */
-  surfaceSubtle: '#EEF3FF',
+  surfaceSubtle: '#F4F6FC',
   /** Links and secondary action labels. */
-  link: '#315FCF',
-  track: '#D9D9D9',
+  link: brand.primary,
+  /** Text on filled accent surfaces. */
+  onAccent: brand.secondary,
+  track: '#E2E5EF',
   danger: '#C43D4D',
   dangerSoft: '#FFF0F2',
   /** Status dots. */
-  success: '#05FF00',
-  queued: '#B7BCB7',
-  printing: '#4066B5',
+  success: '#1E9E6A',
+  queued: '#9AA3B2',
+  printing: brand.primary,
 } as const;
+
+export type AppSection =
+  | 'home'
+  | 'orders'
+  | 'profile'
+  | 'dashboard'
+  | 'jobs'
+  | 'shop'
+  | 'providers'
+  | 'configure'
+  | 'checkout'
+  | 'messages';
+
+export type SectionPalette = {
+  /** Strong accent for icons, indicators and active states. */
+  accent: string;
+  /** Tinted background for hero panels. */
+  soft: string;
+  /** Dark heading colour used on heroes and headers. */
+  ink: string;
+  /** Section-tinted card background. */
+  surface: string;
+  /** Section-tinted border. */
+  border: string;
+};
+
+/**
+ * Distinct palettes per section. The base brand colours stay constant for
+ * buttons and links; these tints give dashboards a sense of place.
+ */
+export const sectionPalettes: Record<AppSection, SectionPalette> = {
+  home: {
+    accent: '#4052D6',
+    soft: '#E9EBFB',
+    ink: '#2F3EA8',
+    surface: '#FFFFFF',
+    border: '#D8DDF5',
+  },
+  orders: {
+    accent: '#0F766E',
+    soft: '#E6F5F2',
+    ink: '#0B5B55',
+    surface: '#FBFEFC',
+    border: '#CBE7E1',
+  },
+  profile: {
+    accent: '#36454F',
+    soft: '#EEF1F3',
+    ink: '#36454F',
+    surface: '#FBFCFD',
+    border: '#D7DEE3',
+  },
+  dashboard: {
+    accent: '#4052D6',
+    soft: '#E9EBFB',
+    ink: '#2F3EA8',
+    surface: '#FFFFFF',
+    border: '#D8DDF5',
+  },
+  jobs: {
+    accent: '#B45309',
+    soft: '#FFF4E5',
+    ink: '#8A4009',
+    surface: '#FFFDF8',
+    border: '#F3DDBB',
+  },
+  shop: {
+    accent: '#6D5AE0',
+    soft: '#EFECFB',
+    ink: '#4C3EB0',
+    surface: '#FDFCFF',
+    border: '#DDD7F5',
+  },
+  providers: {
+    accent: '#2563A6',
+    soft: '#E8F2FB',
+    ink: '#1D4E85',
+    surface: '#FBFDFF',
+    border: '#CFE2F5',
+  },
+  configure: {
+    accent: '#0E7490',
+    soft: '#E6F6F8',
+    ink: '#0B5C68',
+    surface: '#FBFEFF',
+    border: '#C9E7EC',
+  },
+  checkout: {
+    accent: '#15803D',
+    soft: '#EAF7EE',
+    ink: '#176033',
+    surface: '#FCFFFD',
+    border: '#CDE9D6',
+  },
+  messages: {
+    accent: '#BE185D',
+    soft: '#FCECF3',
+    ink: '#8E1B4F',
+    surface: '#FFFBFD',
+    border: '#F3D0E1',
+  },
+};
 
 export const spacing = {
   xs: 4,
@@ -41,6 +153,9 @@ export const spacing = {
   xl: 24,
   xxl: 32,
 } as const;
+
+/** Minimum touch target used by icon-only and compact controls. */
+export const touchTarget = 44;
 
 export const radius = {
   xs: 3,
@@ -57,7 +172,7 @@ export const layout = {
 } as const;
 
 export const shadow = {
-  /** Primary buttons: DROP_SHADOW(#17315B 13% 0 4 10). */
+  /** Primary buttons. */
   button: {
     shadowColor: '#17315B',
     shadowOpacity: 0.13,
@@ -65,7 +180,7 @@ export const shadow = {
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  /** Highlight cards: DROP_SHADOW(#17315B 9% 0 4 10). */
+  /** Highlight cards. */
   card: {
     shadowColor: '#17315B',
     shadowOpacity: 0.09,
@@ -73,7 +188,7 @@ export const shadow = {
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  /** Small raised surfaces: DROP_SHADOW(#000000 25% 0 4 4). */
+  /** Small raised surfaces. */
   raised: {
     shadowColor: '#000000',
     shadowOpacity: 0.25,

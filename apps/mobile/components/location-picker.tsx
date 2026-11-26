@@ -2,7 +2,8 @@ import * as Location from 'expo-location';
 import React, { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { fonts } from '../lib/fonts';
-import { colors, radius, shadow } from '../lib/theme';
+import { colors, radius, shadow, touchTarget } from '../lib/theme';
+import { useReducedMotion } from '../lib/use-reduced-motion';
 import { Button } from './ui';
 import { Icon, icons } from './icons';
 import LocationMap from './location-map';
@@ -36,6 +37,7 @@ export function LocationPicker({
   markerTone?: 'public' | 'private';
   onSelect: (coordinate: LocationCoordinate) => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const [visible, setVisible] = useState(false);
   const [coordinate, setCoordinate] = useState<LocationCoordinate>(DEFAULT_POINT);
   const [locating, setLocating] = useState(false);
@@ -86,7 +88,13 @@ export function LocationPicker({
 
   return (
     <>
-      <Pressable style={styles.launcher} onPress={open} accessibilityRole="button">
+      <Pressable
+        style={styles.launcher}
+        onPress={open}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}. ${summary}`}
+        accessibilityHint={hint}
+      >
         <View style={styles.iconWell}>
           <Icon name={icons.locate} size={20} color={colors.link} />
         </View>
@@ -100,7 +108,7 @@ export function LocationPicker({
 
       <Modal
         visible={visible}
-        animationType="slide"
+        animationType={reduceMotion ? 'none' : 'slide'}
         presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'overFullScreen'}
         onRequestClose={() => setVisible(false)}
       >
@@ -146,6 +154,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    minHeight: touchTarget,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: radius.md,
@@ -162,9 +171,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surfaceSubtle,
   },
-  launcherTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
-  launcherSummary: { fontFamily: fonts.regular, fontSize: 12, color: colors.link, marginTop: 2 },
-  launcherHint: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted, marginTop: 2 },
+  launcherTitle: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 19.6, color: colors.text },
+  launcherSummary: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.link, marginTop: 2 },
+  launcherHint: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted, marginTop: 2 },
   modal: { flex: 1, backgroundColor: colors.bg },
   modalHeader: {
     flexDirection: 'row',

@@ -1,16 +1,18 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AppHeader, Button, Screen } from '../components/ui';
+import { AppHeader, Button, Screen, SectionHero, tabularFigures } from '../components/ui';
 import { Icon, icons } from '../components/icons';
 import { ModelViewer } from '../components/ModelViewer';
 import { api } from '../lib/api';
 import { resolveViewerSource } from '../lib/model-preview';
 import { formatMoney } from '../lib/format';
 import { fonts } from '../lib/fonts';
-import { colors, radius, shadow } from '../lib/theme';
+import { colors, radius, sectionPalettes, shadow } from '../lib/theme';
 import type { ModelDetails } from '../lib/marketplace-types';
 import { MATERIALS, QUALITIES, type Material, type Quality } from '../lib/types';
+
+const palette = sectionPalettes.configure;
 
 const COLORS = [
   { name: 'White', hex: '#FFFFFF', border: '#0066FF' },
@@ -89,13 +91,17 @@ export default function PrintSettingsScreen() {
 
   return (
     <Screen>
-      <AppHeader back />
+      <AppHeader back section="configure" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!viewerInteracting}
       >
-        <Text style={styles.pageLabel}>Print Settings</Text>
+        <SectionHero
+          section="configure"
+          title="Print settings"
+          subtitle="Choose material, quality, color, and quantity."
+        />
 
         {preview ? (
           <View style={styles.viewer}>
@@ -115,7 +121,13 @@ export default function PrintSettingsScreen() {
             <Icon name={icons.box} size={48} color={colors.text} />
           </View>
           <View style={styles.objectCopy}>
-            <Text style={styles.objectName} numberOfLines={1}>{params.fileName ?? 'Example Object'}</Text>
+            <Text
+              style={styles.objectName}
+              numberOfLines={2}
+              accessibilityLabel={params.fileName ?? 'Example Object'}
+            >
+              {params.fileName ?? 'Example Object'}
+            </Text>
             <Text style={styles.objectMeta}>
               {model
                 ? `Size: ${model.boundingBox.x} × ${model.boundingBox.y} × ${model.boundingBox.z} mm\nVolume: ${model.volumeCm3.toFixed(2)} cm³`
@@ -170,12 +182,22 @@ export default function PrintSettingsScreen() {
 
         <Text style={styles.sectionLabel}>Quantity</Text>
         <View style={styles.quantityRow}>
-          <Pressable onPress={() => setQuantity((q) => Math.max(1, q - 1))} style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Decrease quantity"
+            onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+            style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}
+          >
             <Icon name={icons.minus} size={20} color={colors.text} />
           </Pressable>
-          <Text style={styles.quantityValue}>{quantity}</Text>
-          <Pressable onPress={() => setQuantity((q) => q + 1)} style={({ pressed }) => [styles.stepButton, styles.stepButtonActive, pressed && styles.pressed]}>
-            <Icon name={icons.plus} size={20} color="#FFFFFF" />
+          <Text style={[styles.quantityValue, tabularFigures]}>{quantity}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Increase quantity"
+            onPress={() => setQuantity((q) => q + 1)}
+            style={({ pressed }) => [styles.stepButton, styles.stepButtonActive, pressed && styles.pressed]}
+          >
+            <Icon name={icons.plus} size={20} color={colors.onAccent} />
           </Pressable>
         </View>
 
@@ -219,43 +241,42 @@ export default function PrintSettingsScreen() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24, gap: 12 },
   pressed: { opacity: 0.85 },
-  pageLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
   viewer: { height: 280, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.bg },
-  info: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
-  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.danger },
-  sectionLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text, marginTop: 4 },
+  info: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
+  error: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.danger },
+  sectionLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink, marginTop: 4 },
 
-  objectCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 13 },
+  objectCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: palette.soft, borderWidth: 1, borderColor: palette.border, borderRadius: radius.sm, padding: 13 },
   objectThumb: { width: 95, height: 88, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
   objectCopy: { flex: 1, gap: 8 },
-  objectName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  objectMeta: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 14.5, color: colors.text },
+  objectName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink },
+  objectMeta: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted, ...tabularFigures },
 
   materialRow: { flexDirection: 'row', gap: 8 },
-  materialTile: { flex: 1, height: 74, borderRadius: radius.md, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  materialName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  materialRate: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  materialTile: { flex: 1, height: 74, borderRadius: radius.md, backgroundColor: palette.soft, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  materialName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  materialRate: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.text, ...tabularFigures },
 
   colorRow: { gap: 8, paddingVertical: 2 },
   swatch: { width: 46, height: 46, borderRadius: radius.pill, borderWidth: 3 },
   swatchSelected: { borderWidth: 3 },
 
   qualityRow: { flexDirection: 'row', gap: 13 },
-  qualityTile: { flex: 1, height: 71, borderRadius: radius.md, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  qualityName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  qualityLayers: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 15.7, color: colors.text },
+  qualityTile: { flex: 1, height: 71, borderRadius: radius.md, backgroundColor: palette.soft, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  qualityName: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: colors.text },
+  qualityLayers: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.text },
 
   tileActive: { backgroundColor: colors.accent },
-  tileTextActive: { color: '#FFFFFF' },
+  tileTextActive: { color: colors.onAccent },
 
-  quantityRow: { height: 45, borderRadius: radius.sm, backgroundColor: colors.accentSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 9 },
-  stepButton: { width: 42, height: 32, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
-  stepButtonActive: { backgroundColor: colors.accent },
-  quantityValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  quantityRow: { minHeight: 45, borderRadius: radius.sm, backgroundColor: palette.soft, borderWidth: 1, borderColor: palette.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 9 },
+  stepButton: { width: 44, minHeight: 44, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },
+  stepButtonActive: { backgroundColor: palette.accent },
+  quantityValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink, ...tabularFigures },
 
-  priceCard: { backgroundColor: colors.accentSoft, borderRadius: radius.sm, padding: 12, gap: 6, minHeight: 116 },
-  priceLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
-  priceValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 19.4, color: colors.text },
+  priceCard: { backgroundColor: palette.soft, borderWidth: 1, borderColor: palette.border, borderRadius: radius.sm, padding: 12, gap: 6, minHeight: 116 },
+  priceLabel: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.ink },
+  priceValue: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 20.8, color: palette.accent, ...tabularFigures },
 
   bottomBar: {
     position: 'absolute',
@@ -264,7 +285,9 @@ const styles = StyleSheet.create({
     bottom: 20,
     height: 84,
     borderRadius: radius.sm,
-    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.soft,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 17,
