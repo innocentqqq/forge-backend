@@ -8,7 +8,19 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Badge, Banner, Button, Card, Chip, ErrorView, LoadingView, Screen, SectionTitle, Toggle } from './ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  Chip,
+  ErrorView,
+  LoadingView,
+  Screen,
+  SectionTitle,
+  SettingRow,
+  Toggle,
+} from './ui';
 import { Icon, icons } from './icons';
 import { api, ApiError } from '../lib/api';
 import { formatDate, formatMoney, STATUS_LABELS } from '../lib/format';
@@ -17,7 +29,8 @@ import { progressForStatus } from '../lib/order-status';
 import { colors, radius } from '../lib/theme';
 import type { Quality } from '../lib/types';
 import type { MarketplaceOrder } from '../lib/marketplace-types';
-import type { ProviderProfile } from '../lib/provider-onboarding';
+import { DAY_LABELS, PICKUP_DAYS, type ProviderProfile } from '../lib/provider-onboarding';
+import type { ProviderShopSection } from './provider-shop-editor';
 
 export type ProviderSection = 'dashboard' | 'orders' | 'settings';
 
@@ -50,6 +63,19 @@ function statusLabel(provider: ProviderProfile) {
 
 function statusTone(provider: ProviderProfile): 'success' | 'warning' {
   return provider.status === 'active' && provider.availability.isOpen ? 'success' : 'warning';
+}
+
+function hoursSummary(hours: ProviderProfile['hours']): string {
+  const open = PICKUP_DAYS.filter((day) => hours[day]);
+  if (open.length === 0) return 'No pickup days set';
+  if (open.length === PICKUP_DAYS.length) return 'Open every day';
+  if (
+    open.length === 5 &&
+    PICKUP_DAYS.slice(0, 5).every((day) => Boolean(hours[day]))
+  ) {
+    return 'Weekdays';
+  }
+  return open.map((day) => DAY_LABELS[day].slice(0, 3)).join(', ');
 }
 
 export function ProviderHeader({ title }: { title: string }) {
@@ -153,6 +179,11 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
     }
   };
 
+  const openQuickEdit = (section: ProviderShopSection) => {
+    setActionError('');
+    router.push(`/provider-shop/${section}` as never);
+  };
+
   if (loading) {
     return (
       <Screen style={styles.screen}>
@@ -224,6 +255,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
             onOpenOrder={openOrder}
             onUpdateStatus={(order, status) => void updateStatus(order, status)}
             onEditSetup={() => router.push('/provider-onboarding' as never)}
+            onQuickEdit={openQuickEdit}
             onAvailabilityChange={(isOpen) => void updateAvailability(isOpen)}
           />
         ) : null}
@@ -238,6 +270,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
           <SettingsSection
             provider={provider}
             onEditSetup={() => router.push('/provider-onboarding' as never)}
+            onQuickEdit={openQuickEdit}
             onAvailabilityChange={(isOpen) => void updateAvailability(isOpen)}
           />
         ) : null}
@@ -256,6 +289,7 @@ function DashboardSection({
   onOpenOrder,
   onUpdateStatus,
   onEditSetup,
+  onQuickEdit,
   onAvailabilityChange,
 }: {
   provider: ProviderProfile;
@@ -263,6 +297,7 @@ function DashboardSection({
   onOpenOrder: (order: MarketplaceOrder) => void;
   onUpdateStatus: (order: MarketplaceOrder, status: MarketplaceOrder['status']) => void;
   onEditSetup: () => void;
+  onQuickEdit: (section: ProviderShopSection) => void;
   onAvailabilityChange: (isOpen: boolean) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -312,7 +347,17 @@ function DashboardSection({
           {activePrinters} active printer{activePrinters === 1 ? '' : 's'} ·{' '}
           {provider.pickupArea || 'Pickup area not set'}
         </Text>
-        <Button title="Edit provider profile" variant="secondary" onPress={onEditSetup} />
+        <Button
+          title="Quick edit printers"
+          variant="secondary"
+          onPress={() => onQuickEdit('printers')}
+        />
+        <Button
+          title="Change open days"
+          variant="secondary"
+          onPress={() => onQuickEdit('hours')}
+        />
+        <Button title="Full provider setup" variant="ghost" onPress={onEditSetup} />
       </Card>
 
       <View style={styles.ordersHeader}>
@@ -498,25 +543,47 @@ function OrderCard({
 function SettingsSection({
   provider,
   onEditSetup,
+  onQuickEdit,
   onAvailabilityChange,
 }: {
   provider: ProviderProfile;
   onEditSetup: () => void;
+  onQuickEdit: (section: ProviderShopSection) => void;
   onAvailabilityChange: (isOpen: boolean) => void;
 }) {
+  const activePrinters = provider.printers.filter((printer) => printer.isActive).length;
+
   return (
     <View style={styles.sectionGap}>
       <Card>
-        <Text style={styles.cardTitle}>Shop profile</Text>
-        <Text style={styles.cardDetail}>{provider.displayName}</Text>
+        <Text style={styles.cardTitle}>Quick edits</Text>
         <Text style={styles.cardDetail}>
-          {provider.type === 'LAB' ? 'Lab / makerspace' : 'Individual maker'}
+          Change the things you use most without running the full setup again.
         </Text>
-        <Text style={styles.cardDetail}>Pickup area: {provider.pickupArea || 'Not set'}</Text>
-        <Text style={styles.cardDetail}>
-          Contact: {provider.contactPhone || 'Not provided'}
-        </Text>
-        <Button title="Edit provider profile" variant="secondary" onPress={onEditSetup} />
+        <SettingRow
+          icon={icons.settings}
+          title="Shop details & phone"
+          detail={`${provider.displayName} · ${provider.contactPhone || 'No phone'}`}
+          onPress={() => onQuickEdit('profile')}
+        />
+        <SettingRow
+          icon={icons.locate}
+          title="Pickup location"
+          detail={provider.pickupArea || 'Not set'}
+          onPress={() => onQuickEdit('location')}
+        />
+        <SettingRow
+          icon={icons.clock}
+          title="Open days & hours"
+          detail={hoursSummary(provider.hours)}
+          onPress={() => onQuickEdit('hours')}
+        />
+        <SettingRow
+          icon={icons.printer}
+          title="Printers"
+          detail={`${activePrinters} active · ${provider.printers.length} total`}
+          onPress={() => onQuickEdit('printers')}
+        />
       </Card>
 
       <Card>
@@ -537,6 +604,11 @@ function SettingsSection({
         <Text style={styles.cardDetail}>Turnaround: {provider.turnaroundDays} days</Text>
         <Text style={styles.cardDetail}>Max active orders: {provider.maxActiveOrders}</Text>
         <Text style={styles.cardDetail}>Queue slots: {provider.availability.maxQueueSize}</Text>
+        <Button
+          title="Edit capacity"
+          variant="secondary"
+          onPress={() => onQuickEdit('profile')}
+        />
       </Card>
 
       <View>
@@ -561,7 +633,20 @@ function SettingsSection({
             </Card>
           ))
         )}
+        <Button
+          title="Add or edit printers"
+          variant="secondary"
+          onPress={() => onQuickEdit('printers')}
+        />
       </View>
+
+      <Card>
+        <Text style={styles.cardTitle}>Full provider setup</Text>
+        <Text style={styles.cardDetail}>
+          Use the wizard for material rates, agreements, and a complete review of your shop.
+        </Text>
+        <Button title="Open full setup" variant="ghost" onPress={onEditSetup} />
+      </Card>
     </View>
   );
 }

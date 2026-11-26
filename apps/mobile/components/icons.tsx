@@ -37,6 +37,7 @@ export const icons = {
   minus: 'remove',
   pin: 'location-outline',
   locate: 'locate-outline',
+  clock: 'time-outline',
   phone: 'call-outline',
   chat: 'chatbubble-outline',
   card: 'card-outline',

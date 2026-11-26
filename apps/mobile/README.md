@@ -10,7 +10,7 @@ Expo (React Native + TypeScript + Expo Router) client for the `forge-backend` AP
 - **Orders** tab: active and past order lists; order tracking polls while focused and shows build progress. The 3D preview supports drag-to-orbit, two-finger pan/zoom, and reset view while the print builds.
 - **Profile** tab: editable name/phone, print preferences, stats, Security screen (password, recovery email, verification, sign-out), and sign out.
 - Per-order contact cards with phone dialing and a customer↔provider message thread on both order screens.
-- **Provider** tab: full provider setup wizard (type, public/private location, printers, per-material rates, pickup hours, agreements), activation gate, open/closed toggle, queue settings, and incoming orders.
+- **Provider** tab: full provider setup wizard (type, public/private location, printers, per-material rates, pickup hours, agreements), activation gate, open/closed toggle, queue settings, and incoming orders. The Shop tab also has quick editors for shop details/phone, pickup location and map pin, open days, and printers, so common changes don't require rerunning onboarding.
 - Public provider cards: verified badge, description, photo URL, individual-maker privacy note, and “model doesn’t fit” state.
 
 ## 1. Configure
