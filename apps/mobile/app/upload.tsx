@@ -12,8 +12,9 @@ import {
 import {
   AppHeader,
   Button,
+  ModeBadge,
   Screen,
-  SectionHero,
+  SpecLabel,
   tabularFigures,
 } from "../components/ui";
 import { api } from "../lib/api";
@@ -22,7 +23,7 @@ import { colors, radius, sectionPalettes } from "../lib/theme";
 
 const palette = sectionPalettes.configure;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_FORMATS = ["stl", "obj"] as const;
+const ALLOWED_FORMATS = ["stl", "obj", "3mf"] as const;
 
 function getFormat(fileName: string) {
   const format = fileName.split(".").pop()?.toLowerCase();
@@ -59,7 +60,7 @@ export default function UploadScreen() {
     const format = getFormat(file.name);
     if (!format) {
       setError(
-        "Unsupported file type. Choose an STL or OBJ model. 3MF is not supported yet.",
+        "Unsupported file type. Choose an STL, OBJ or 3MF model.",
       );
       return;
     }
@@ -118,11 +119,14 @@ export default function UploadScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <SectionHero
-          section="configure"
-          title="Upload a 3D model"
-          subtitle="Select an STL or OBJ file. Files must be 50 MB or smaller."
-        />
+        <View style={styles.modeRow}>
+          <ModeBadge mode="customer" />
+        </View>
+        <View style={styles.intro}>
+          <SpecLabel>STEP 01 · UPLOAD</SpecLabel>
+          <Text style={styles.title}>Upload a model</Text>
+          <Text style={styles.subtitle}>STL, OBJ or 3MF · up to 50 MB</Text>
+        </View>
 
         <Pressable
           accessibilityRole="button"
@@ -142,9 +146,9 @@ export default function UploadScreen() {
             <Text style={styles.icon}>＋</Text>
           )}
           <Text style={styles.dropTitle}>
-            {busy ? "Uploading and processing…" : "Choose a model file"}
+            {busy ? "Uploading and processing…" : "Drop your model here"}
           </Text>
-          <Text style={styles.dropDetail}>STL · OBJ</Text>
+          <Text style={styles.dropDetail}>or choose a file</Text>
         </Pressable>
 
         {busy ? (
@@ -169,7 +173,7 @@ export default function UploadScreen() {
           </Text>
         ) : null}
         <Button
-          title="Browse files"
+          title="Choose file"
           onPress={() => void chooseFile()}
           loading={busy}
           disabled={busy}
@@ -182,11 +186,15 @@ export default function UploadScreen() {
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingTop: 8,
     paddingBottom: 32,
     gap: 16,
   },
+  modeRow: { alignItems: 'flex-end' },
+  intro: { gap: 6 },
+  title: { fontFamily: fonts.displayBold, fontSize: 28, lineHeight: 34, color: colors.text },
+  subtitle: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 17, color: colors.muted },
   drop: {
     minHeight: 190,
     borderRadius: radius.md,

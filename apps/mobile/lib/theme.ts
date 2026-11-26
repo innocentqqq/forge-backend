@@ -1,46 +1,62 @@
 /**
  * Forge design tokens.
  *
- * Brand colours are fixed: primary #4052D6, secondary #FFFFFF, tertiary
- * #36454F. Each app section also gets a tinted palette so a screen has its own
- * visual identity without drifting away from the brand.
+ * Dark industrial marketplace palette from the Figma handoff. The app keeps
+ * section palettes so existing screens retain their identity, but every
+ * palette now resolves to the same graphite / orange / off-white system.
  */
 
 export const brand = {
-  primary: '#4052D6',
-  secondary: '#FFFFFF',
-  tertiary: '#36454F',
+  /** Primary action orange. */
+  primary: '#F47738',
+  /** Primary copy. */
+  secondary: '#F1F0EB',
+  /** Card / surface graphite. */
+  tertiary: '#222629',
+} as const;
+
+export const forgeTokens = {
+  bg: '#151719',
+  surface: '#222629',
+  primary: '#F47738',
+  text: '#F1F0EB',
+  muted: '#8C969B',
+  success: '#79B88A',
+  successSurface: '#2E4F38',
+  error: '#E15D5D',
+  border: '#3A4043',
 } as const;
 
 export const colors = {
   /** Page background. */
-  bg: brand.secondary,
-  secondary: brand.secondary,
-  tertiary: brand.tertiary,
-  surface: brand.secondary,
+  bg: forgeTokens.bg,
+  secondary: forgeTokens.text,
+  tertiary: forgeTokens.surface,
+  surface: forgeTokens.surface,
   /** Default 1px card / input border. */
-  border: '#D8DDF5',
+  border: forgeTokens.border,
   /** Primary copy. */
-  text: brand.tertiary,
+  text: forgeTokens.text,
   /** Secondary copy. */
-  muted: '#6B7280',
+  muted: forgeTokens.muted,
   /** Primary action colour. */
-  accent: brand.primary,
-  /** Soft panels, cards and tab bars. */
-  accentSoft: '#E9EBFB',
-  /** Tinted surface used for chips, icon wells and status pills. */
-  surfaceSubtle: '#F4F6FC',
+  accent: forgeTokens.primary,
+  /** Raised panels and tab bars. */
+  accentSoft: '#292E31',
+  /** Quiet panels, chips and status pills. */
+  surfaceSubtle: '#1C1F21',
   /** Links and secondary action labels. */
-  link: brand.primary,
+  link: forgeTokens.primary,
   /** Text on filled accent surfaces. */
-  onAccent: brand.secondary,
-  track: '#E2E5EF',
-  danger: '#C43D4D',
-  dangerSoft: '#FFF0F2',
+  onAccent: '#151719',
+  track: '#3A4043',
+  danger: forgeTokens.error,
+  dangerSoft: '#3A2626',
   /** Status dots. */
-  success: '#1E9E6A',
-  queued: '#9AA3B2',
-  printing: brand.primary,
+  success: forgeTokens.success,
+  successSurface: forgeTokens.successSurface,
+  queued: forgeTokens.muted,
+  printing: forgeTokens.primary,
 } as const;
 
 export type AppSection =
@@ -58,91 +74,40 @@ export type AppSection =
 export type SectionPalette = {
   /** Strong accent for icons, indicators and active states. */
   accent: string;
-  /** Tinted background for hero panels. */
+  /** Raised panel background. */
   soft: string;
-  /** Dark heading colour used on heroes and headers. */
+  /** Heading colour on dark surfaces. */
   ink: string;
-  /** Section-tinted card background. */
+  /** Card background. */
   surface: string;
-  /** Section-tinted border. */
+  /** Card border. */
   border: string;
 };
 
 /**
- * Distinct palettes per section. The base brand colours stay constant for
- * buttons and links; these tints give dashboards a sense of place.
+ * Every section uses the shared industrial palette. The `soft` shade varies
+ * slightly to keep long lists from feeling flat, without introducing colours
+ * outside the handoff.
  */
+const darkPalette = (soft: string, accent: string = forgeTokens.primary): SectionPalette => ({
+  accent,
+  soft,
+  ink: forgeTokens.text,
+  surface: forgeTokens.surface,
+  border: forgeTokens.border,
+});
+
 export const sectionPalettes: Record<AppSection, SectionPalette> = {
-  home: {
-    accent: '#4052D6',
-    soft: '#E9EBFB',
-    ink: '#2F3EA8',
-    surface: '#FFFFFF',
-    border: '#D8DDF5',
-  },
-  orders: {
-    accent: '#0F766E',
-    soft: '#E6F5F2',
-    ink: '#0B5B55',
-    surface: '#FBFEFC',
-    border: '#CBE7E1',
-  },
-  profile: {
-    accent: '#36454F',
-    soft: '#EEF1F3',
-    ink: '#36454F',
-    surface: '#FBFCFD',
-    border: '#D7DEE3',
-  },
-  dashboard: {
-    accent: '#4052D6',
-    soft: '#E9EBFB',
-    ink: '#2F3EA8',
-    surface: '#FFFFFF',
-    border: '#D8DDF5',
-  },
-  jobs: {
-    accent: '#B45309',
-    soft: '#FFF4E5',
-    ink: '#8A4009',
-    surface: '#FFFDF8',
-    border: '#F3DDBB',
-  },
-  shop: {
-    accent: '#6D5AE0',
-    soft: '#EFECFB',
-    ink: '#4C3EB0',
-    surface: '#FDFCFF',
-    border: '#DDD7F5',
-  },
-  providers: {
-    accent: '#2563A6',
-    soft: '#E8F2FB',
-    ink: '#1D4E85',
-    surface: '#FBFDFF',
-    border: '#CFE2F5',
-  },
-  configure: {
-    accent: '#0E7490',
-    soft: '#E6F6F8',
-    ink: '#0B5C68',
-    surface: '#FBFEFF',
-    border: '#C9E7EC',
-  },
-  checkout: {
-    accent: '#15803D',
-    soft: '#EAF7EE',
-    ink: '#176033',
-    surface: '#FCFFFD',
-    border: '#CDE9D6',
-  },
-  messages: {
-    accent: '#BE185D',
-    soft: '#FCECF3',
-    ink: '#8E1B4F',
-    surface: '#FFFBFD',
-    border: '#F3D0E1',
-  },
+  home: darkPalette('#1C1F21'),
+  orders: darkPalette('#1C1F21'),
+  profile: darkPalette('#1C1F21'),
+  dashboard: darkPalette('#1C1F21'),
+  jobs: darkPalette('#1C1F21', forgeTokens.success),
+  shop: darkPalette('#1C1F21'),
+  providers: darkPalette('#1C1F21'),
+  configure: darkPalette('#1C1F21'),
+  checkout: darkPalette('#1C1F21', forgeTokens.success),
+  messages: darkPalette('#1C1F21'),
 };
 
 export const spacing = {
@@ -158,42 +123,40 @@ export const spacing = {
 export const touchTarget = 44;
 
 export const radius = {
-  xs: 3,
-  sm: 5,
-  md: 10,
+  xs: 6,
+  sm: 10,
+  md: 12,
   pill: 999,
 } as const;
 
 /** Screen gutter used by the Figma frames. */
 export const layout = {
-  gutter: 24,
-  headerHeight: 104,
-  tabBarHeight: 84,
+  gutter: 16,
+  headerHeight: 88,
+  tabBarHeight: 72,
 } as const;
 
+/** Borders replace heavy shadows in the industrial system. */
 export const shadow = {
-  /** Primary buttons. */
   button: {
-    shadowColor: '#17315B',
-    shadowOpacity: 0.13,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowColor: '#000000',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
-  /** Highlight cards. */
   card: {
-    shadowColor: '#17315B',
-    shadowOpacity: 0.09,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowColor: '#000000',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
-  /** Small raised surfaces. */
   raised: {
     shadowColor: '#000000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
 } as const;

@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ModelViewer } from '../../components/ModelViewer';
-import { AppHeader, Badge, Button, ErrorView, LoadingView, ProgressBar, Screen, SectionHero, StatusPill, tabularFigures } from '../../components/ui';
+import { AppHeader, Badge, Button, ErrorView, LoadingView, ModeBadge, ProgressBar, Screen, SpecLabel, StatusPill, TimelineItem, tabularFigures } from '../../components/ui';
 import { Icon, icons } from '../../components/icons';
 import { api } from '../../lib/api';
 import { resolveViewerSource } from '../../lib/model-preview';
@@ -14,6 +14,11 @@ import { ORDER_STAGES, PRINT_COMPLETE_STATUSES } from '../../lib/order-status';
 import { colors, radius, sectionPalettes, shadow } from '../../lib/theme';
 
 const palette = sectionPalettes.orders;
+
+function orderNumber(value: string) {
+  if (!value) return 'FG-48291';
+  return value.startsWith('FG-') ? value : `FG-${value}`;
+}
 
 function etaLabel(eta: string | null) {
   if (!eta) return 'Provider to confirm';
@@ -94,14 +99,19 @@ export default function OrderTrackingScreen() {
         showsVerticalScrollIndicator={false}
         scrollEnabled={!viewerInteracting}
       >
-        <SectionHero
-          section="orders"
-          title="Order tracking"
-          subtitle="Watch your model build from the bottom up."
-          action={<Badge label={`${Math.round(progress)}% complete`} accent={palette.accent} />}
-        />
+        <View style={styles.modeRow}>
+          <ModeBadge mode="customer" />
+          <Badge label={`${Math.round(progress)}% complete`} tone="success" />
+        </View>
+        <View style={styles.intro}>
+          <SpecLabel>STEP 05 · TRACK</SpecLabel>
+          <Text style={styles.title}>Order #{orderNumber(order.order_number)}</Text>
+          <Text style={styles.subtitle}>
+            {STATUS_LABELS[order.status] ?? order.status} · {Math.round(progress)}% · Expected {etaLabel(order.eta)}
+          </Text>
+        </View>
         <View style={styles.summary}>
-          <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
+          <Text style={styles.orderNumber}>Order #{orderNumber(order.order_number)}</Text>
           <Text style={styles.provider}>{order.printers?.name ?? 'Your provider'}</Text>
           <StatusPill
             label={STATUS_LABELS[order.status] ?? order.status}
@@ -136,29 +146,21 @@ export default function OrderTrackingScreen() {
           {ORDER_STAGES.map((stage, index) => {
             const done = currentIndex > index;
             const current = currentIndex === index;
-            const color = done ? colors.success : current ? colors.printing : colors.queued;
             return (
-              <View key={stage} style={styles.step}>
-                <View style={styles.rail}>
-                  <View style={[styles.dot, { backgroundColor: color }]}>
-                    {done ? <Icon name={icons.check} size={13} color={colors.text} /> : null}
-                  </View>
-                  {index < ORDER_STAGES.length - 1 ? <View style={[styles.line, done && styles.lineDone]} /> : null}
-                </View>
-                <View style={styles.stepCopy}>
-                  <Text style={[styles.stepTitle, (done || current) && styles.stepTitleActive]}>
-                    {STATUS_LABELS[stage]}
-                  </Text>
-                  {current ? <Text style={styles.stepDetail}>Current status</Text> : null}
-                </View>
-              </View>
+              <TimelineItem
+                key={stage}
+                title={STATUS_LABELS[stage]}
+                detail={current ? 'Current status' : undefined}
+                state={done ? 'done' : current ? 'current' : 'upcoming'}
+                last={index === ORDER_STAGES.length - 1}
+              />
             );
           })}
         </View>
 
         <View style={styles.progressCard}>
           <View style={styles.progressRow}>
-            <Text style={styles.progressLabel}>Build progress</Text>
+            <Text style={styles.progressLabel}>BUILD PROGRESS · {Math.round(progress)}%</Text>
             <Text style={styles.progressValue}>{progress}%</Text>
           </View>
           <ProgressBar value={progress} height={12} accent={palette.accent} />
@@ -231,7 +233,11 @@ export default function OrderTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32, gap: 16 },
+  content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32, gap: 16 },
+  modeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  intro: { gap: 6 },
+  title: { fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
+  subtitle: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 17, color: colors.muted },
   summary: {
     backgroundColor: palette.soft,
     borderWidth: 1,
@@ -258,7 +264,7 @@ const styles = StyleSheet.create({
   stepDetail: { marginTop: 3, fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.link },
   progressCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, gap: 10 },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  progressLabel: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 19.6, color: colors.text },
+  progressLabel: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 17, letterSpacing: 0.5, color: colors.muted },
   progressValue: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.text, ...tabularFigures },
   etaCard: { backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
   etaThumb: { minWidth: 88, minHeight: 62, paddingHorizontal: 8, paddingVertical: 8, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadow.raised },

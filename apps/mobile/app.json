@@ -7,7 +7,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kamiiqs.forge"
@@ -15,7 +15,7 @@
     "android": {
       "package": "com.kamiiqs.forge",
       "adaptiveIcon": {
-        "backgroundColor": "#FFEDD5",
+        "backgroundColor": "#151719",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -36,7 +36,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#FAFAF9"
+          "backgroundColor": "#151719"
         }
       ],
       "expo-web-browser",

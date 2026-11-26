@@ -12,7 +12,16 @@ Expo (React Native + TypeScript + Expo Router) client for the `forge-backend` AP
 - Per-order contact cards with phone dialing and a customer↔provider message thread on both order screens.
 - **Provider** tab: full provider setup wizard (type, public/private location, printers, per-material rates, pickup hours, agreements), activation gate, open/closed toggle, queue settings, and incoming orders. The Shop tab also has quick editors for shop details/phone, pickup location and map pin, open days, and printers, so common changes don't require rerunning onboarding.
 - Public provider cards: verified badge, description, photo URL, individual-maker privacy note, and “model doesn’t fit” state.
-- Shared design system: primary `#4052D6`, secondary `#FFFFFF`, tertiary `#36454F`, plus section palettes for Home, Orders, Profile, provider Dashboard, Jobs, Shop, provider search, configure, checkout, and messages so each area feels distinct.
+- Shared dark industrial design system from the Figma handoff: background `#151719`, surface `#222629`, orange `#F47738`, primary text `#F1F0EB`, secondary text `#8C969B`, success `#79B88A`, error `#E15D5D`, and subtle borders `#3A4043`. Space Grotesk handles headings, Inter handles UI copy, and JetBrains Mono handles measurements, prices, and spec labels.
+- Public launch flow: Splash → three-slide Onboarding → Login/Register. The existing auth guard now treats those routes as public.
+
+## Prototype flow map
+
+Customer: Splash → Onboarding → Login/Register → Discover (`/`) → Nearby (`/nearby`) → Printer details (`/printer/:id`) → Upload (`/upload`) → Configure (`/print-settings`) → Compare providers (`/printers`) → Review request (`/checkout`) → Order tracking (`/order/:id`) → Messages (`/messages/:orderId`) → Profile (`/profile`).
+
+Provider: Profile → **Switch to Provider Mode** → Become a provider / register printer (`/provider-onboarding`) → Dashboard (`/provider`) → Manage requests (`/provider/orders`) → Quotation and active job controls (`/provider-order/:id`) → Printer management (`/provider/settings`) → Earnings (`/provider-earnings`) → Provider profile (`/provider-profile`).
+
+All prices are labelled **Estimate** until a provider confirms the final quotation. Loading, empty, error, and success states are available on each flow screen.
 
 ## 1. Configure
 
@@ -127,9 +136,9 @@ In mock mode all of this is in memory; restart the app to reset it.
 ### One-device mock demo
 
 1. Open `/dev/viewer` once to confirm the real 3D viewer renders (`expo://<tunnel>/--/dev/viewer`).
-2. Sign in, then use **Upload** to pick an STL or OBJ file. Mock mode keeps the picked file
-   on the device and previews that exact model — no bundled cube substitute. 3MF files are
-   rejected with a clear message because parsing and previews are not supported yet.
+2. Sign in, then use **Upload** to pick an STL, OBJ, or 3MF file. Mock mode keeps the picked file
+   on the device and previews that exact model — no bundled cube substitute. If the deployed
+   API cannot parse a format yet, the upload error is shown on the same screen.
 3. On **Print settings**, confirm the live 3D preview, dimensions, volume, and estimate. These
    are measured from the file you selected.
 4. Choose a provider and place the order. Mock mode skips provider acceptance entirely:
@@ -153,7 +162,7 @@ order from its own provider profile.
 1. Provider phone: sign in, open **Profile → Become a provider**, complete the six steps
    (pickup area, FDM printer, PLA/ABS/PETG/TPU rates, hours, agreements), add a contact phone, and activate.
 2. Customer phone: sign in with the other account, open **Profile → Personal details**, save a
-    contact phone, then upload an STL or OBJ file, confirm the
+    contact phone, then upload an STL, OBJ, or 3MF file, confirm the
    dimensions/volume/estimate, choose the provider, and place the order. An individual provider
    creates a pending request; a lab order is confirmed immediately.
 3. Provider phone: open **Provider → Jobs**, then open the new order. Accept it if it is
@@ -173,6 +182,12 @@ order from its own provider profile.
 A manual progress/status update cancels the demo projection and hands control back to the
 provider's slider/status buttons. The final handoff is role-protected: only the customer can set
 `PICKED_UP`, and only the provider can set `COMPLETED`.
+
+For the Figma walkthrough, start at **Splash → Onboarding** on the customer device, then follow
+**Discover → Nearby → Printer details → Upload → Configure → Compare → Review request → Tracking**.
+Open **Messages** from the tracker to send or receive the final quotation. On the provider device,
+use **Shop → Provider profile** for the verified shop view and **Shop → Earnings** for the payout
+screen. Both profiles keep the existing mode switch in the same account.
 
 ## Feature limitations
 

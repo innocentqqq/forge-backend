@@ -1,11 +1,19 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AppHeader, Button, Screen, StatusPill } from "../components/ui";
+import {
+  AppHeader,
+  Button,
+  EstimateRow,
+  ModeBadge,
+  ScreenScroll,
+  SpecLabel,
+  StatusPill,
+} from "../components/ui";
 import { Icon, icons } from "../components/icons";
 import { formatDate } from "../lib/format";
 import { fonts } from "../lib/fonts";
-import { colors, radius, shadow } from "../lib/theme";
+import { colors, radius } from "../lib/theme";
 
 export default function OrderConfirmationScreen() {
   const { orderId, orderNumber, printer, eta, status } = useLocalSearchParams<{
@@ -19,115 +27,117 @@ export default function OrderConfirmationScreen() {
   const awaitingAcceptance = status === "PENDING_ACCEPTANCE";
 
   return (
-    <Screen>
+    <ScreenScroll>
       <AppHeader />
-      <View style={styles.content}>
+      <View style={styles.modeRow}>
+        <ModeBadge mode="customer" />
+      </View>
+
+      <View style={styles.hero}>
         <View style={styles.mark}>
-          <Icon name={icons.box} size={26} color={colors.text} />
+          <Icon name={icons.check} size={30} color={colors.success} />
         </View>
-
+        <SpecLabel>{awaitingAcceptance ? "REQUEST SENT" : "ORDER CONFIRMED"}</SpecLabel>
         <Text style={styles.title}>
-          {awaitingAcceptance ? "Order request sent" : "Order confirmed"}
+          {awaitingAcceptance ? "Waiting for provider" : "Your print is confirmed"}
         </Text>
-
         <StatusPill
-          label={awaitingAcceptance ? "Waiting for provider" : "Confirmed"}
-          tone={awaitingAcceptance ? "queued" : "active"}
+          label={awaitingAcceptance ? "AWAITING ACCEPTANCE" : "CONFIRMED"}
+          tone={awaitingAcceptance ? "queued" : "done"}
         />
-
         <Text style={styles.body}>
           {orderNumber
-            ? awaitingAcceptance
-              ? `Order #${orderNumber} was sent to ${printer || "your provider"}. They must accept it before printing begins.`
-              : `Order #${orderNumber} is confirmed with ${printer || "your provider"} and is ready to be queued.`
-            : awaitingAcceptance
-              ? "Your print request was sent. The provider must accept it before printing begins."
-              : "Your print order is confirmed. The provider will queue it for printing."}
+            ? `Order #${orderNumber} was sent to ${printer || "your provider"}.`
+            : `Your print request was sent to ${printer || "your provider"}.`}
         </Text>
-
-        <View style={styles.etaCard}>
-          <Text style={styles.etaLabel}>Estimated ready</Text>
-          <Text style={styles.etaValue}>
-            {eta ? formatDate(eta) : "Provider to confirm"}
+        {awaitingAcceptance ? (
+          <Text style={styles.note}>
+            Printing starts only after the provider accepts. You can track the request here.
           </Text>
-        </View>
-
-        <Button
-          title="Track order"
-          onPress={() =>
-            orderId
-              ? router.replace(`/order/${orderId}`)
-              : router.replace("/orders")
-          }
-        />
-
-        <Pressable onPress={() => router.replace("/")} hitSlop={8}>
-          <Text style={styles.link}>Back to home</Text>
-        </Pressable>
+        ) : null}
       </View>
-    </Screen>
+
+      <View style={styles.card}>
+        <EstimateRow label="Order number" value={orderNumber ? `#${orderNumber}` : "—"} emphasis />
+        <EstimateRow label="Provider" value={printer || "Provider to confirm"} />
+        <EstimateRow
+          label="Estimated ready"
+          value={eta ? formatDate(eta) : "Provider to confirm"}
+        />
+      </View>
+
+      <Button
+        title="Track order"
+        onPress={() =>
+          orderId
+            ? router.replace(`/order/${orderId}` as never)
+            : router.replace("/orders" as never)
+        }
+      />
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back to discover"
+        onPress={() => router.replace("/" as never)}
+        hitSlop={8}
+      >
+        <Text style={styles.link}>Back to discover</Text>
+      </Pressable>
+    </ScreenScroll>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    gap: 16,
-  },
+  modeRow: { alignItems: "flex-end" },
+  hero: { alignItems: "center", gap: 10, paddingVertical: 12 },
   mark: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
     borderRadius: radius.pill,
-    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: colors.successSurface,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 6,
   },
   title: {
-    fontFamily: fonts.bold,
-    fontSize: 32,
-    lineHeight: 38.7,
+    fontFamily: fonts.displayBold,
+    fontSize: 28,
+    lineHeight: 34,
     color: colors.text,
     textAlign: "center",
   },
   body: {
     maxWidth: 320,
     fontFamily: fonts.regular,
-    fontSize: 16,
-    lineHeight: 23.2,
+    fontSize: 14,
+    lineHeight: 20,
     color: colors.muted,
     textAlign: "center",
   },
-  etaCard: {
-    alignSelf: "stretch",
-    backgroundColor: colors.accentSoft,
-    borderRadius: radius.md,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    ...shadow.card,
-  },
-  etaLabel: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    lineHeight: 15.7,
+  note: {
+    maxWidth: 320,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 16,
     color: colors.muted,
+    textAlign: "center",
   },
-  etaValue: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    lineHeight: 19.4,
-    color: colors.text,
+  card: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 14,
+    gap: 12,
   },
   link: {
     fontFamily: fonts.semibold,
     fontSize: 13,
-    lineHeight: 15.7,
+    lineHeight: 18,
     color: colors.link,
+    textAlign: "center",
+    minHeight: 44,
   },
 });

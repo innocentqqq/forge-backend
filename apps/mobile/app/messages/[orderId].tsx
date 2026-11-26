@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { OrderMessages } from '../../components/order-messages';
-import { AppHeader, Banner, Button, LoadingView, ScreenScroll, SectionHero } from '../../components/ui';
+import { AppHeader, Banner, Button, LoadingView, ModeBadge, ScreenScroll, SectionHero } from '../../components/ui';
 import { api } from '../../lib/api';
 import { fonts } from '../../lib/fonts';
 import type { MarketplaceOrder } from '../../lib/marketplace-types';
@@ -74,6 +74,9 @@ export default function OrderMessagesScreen() {
   return (
     <ScreenScroll contentStyle={styles.content}>
       <AppHeader back section="messages" />
+      <View style={styles.modeRow}>
+        <ModeBadge mode={viewerRole === 'PROVIDER' ? 'provider' : 'customer'} />
+      </View>
       <SectionHero
         section="messages"
         title="Messages"
@@ -106,7 +109,8 @@ export default function OrderMessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32, gap: 12 },
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32, gap: 12 },
+  modeRow: { alignItems: 'flex-end' },
   contactCard: {
     flexDirection: 'row',
     alignItems: 'center',

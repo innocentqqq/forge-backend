@@ -55,8 +55,8 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
-      title="Welcome back"
-      description="Sign in to upload designs, find nearby printers, and track every print."
+      title="Welcome back."
+      description="Sign in to continue creating."
       footer={<AuthFooterLink prompt="New to Forge?" action="Sign up" onPress={() => router.push('/sign-up')} />}
     >
       {error ? <Banner message={error} /> : null}
@@ -89,7 +89,7 @@ export default function SignInScreen() {
           style={styles.remember}
         >
           <View style={[styles.checkbox, remember && styles.checkboxOn]}>
-            {remember ? <Icon name={icons.check} size={12} color="#FFFFFF" /> : null}
+            {remember ? <Icon name={icons.check} size={12} color={colors.onAccent} /> : null}
           </View>
           <Text style={styles.rememberText}>Remember me</Text>
         </Pressable>

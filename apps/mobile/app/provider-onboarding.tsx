@@ -18,6 +18,7 @@ import {
   Chip,
   FilledField,
   LoadingView,
+  ModeBadge,
   Radio,
   Screen,
   SectionTitle,
@@ -220,12 +221,15 @@ export default function ProviderOnboardingScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppHeader back section="shop" />
+          <View style={styles.modeRow}>
+            <ModeBadge mode="provider" />
+          </View>
           <View style={styles.titleRow}>
-            <Text style={styles.pageTitle}>Become a provider</Text>
+            <Text style={styles.pageTitle}>Register as provider</Text>
             <Badge label={`Step ${step + 1} of ${STEPS.length}`} tone="info" />
           </View>
           <Text style={styles.intro}>
-            Set up your lab or maker profile once. You keep the same Forge account as a customer.
+            Individual · University · Institution · Business · Makerspace. One account can be both customer and provider.
           </Text>
 
           <View style={styles.steps}>
@@ -873,8 +877,9 @@ function ReviewStep({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, gap: 14 },
+  modeRow: { alignItems: 'flex-end' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
+  pageTitle: { fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
   intro: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
   helper: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colors.muted },
   steps: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

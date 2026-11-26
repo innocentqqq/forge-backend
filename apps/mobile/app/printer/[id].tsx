@@ -11,8 +11,10 @@ import {
   ErrorView,
   Label,
   LoadingView,
-  PageTitle,
+  ModeBadge,
   Screen,
+  SpecLabel,
+  StatusPill,
   TextField,
   tabularFigures,
 } from '../../components/ui';
@@ -116,8 +118,23 @@ export default function PrinterDetailScreen() {
     <Screen>
       <AppHeader back />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <PageTitle>{printer.name}</PageTitle>
-        <Text style={styles.location}>{printer.location_details ?? 'Pickup details unavailable'}</Text>
+        <View style={styles.modeRow}>
+          <ModeBadge mode="customer" />
+        </View>
+        <View style={styles.intro}>
+          <SpecLabel>PRINTER DETAILS</SpecLabel>
+          <View style={styles.titleRow}>
+            <Text style={styles.pageTitle} numberOfLines={2}>{printer.name}</Text>
+            <StatusPill label="AVAILABLE" tone="done" />
+          </View>
+          <Text style={styles.subtitle}>
+            {printer.model_name ?? 'FDM printer'} · FDM ·{' '}
+            {printer.distance_km === null
+              ? 'Distance unavailable'
+              : `${printer.distance_km.toFixed(1)} km away`}
+          </Text>
+          <Text style={styles.location}>{printer.location_details ?? 'Pickup details unavailable'}</Text>
+        </View>
 
         <View style={styles.summary}>
           <Stat label="Distance" value={printer.distance_km !== null ? `${printer.distance_km.toFixed(1)} km` : '—'} />
@@ -181,9 +198,10 @@ export default function PrinterDetailScreen() {
           <Divider />
 
           <View style={styles.estimateRow}>
-            <Text style={styles.estimateLabel}>Estimated total</Text>
+            <SpecLabel>ESTIMATE</SpecLabel>
             <Text style={styles.estimateValue}>{formatMoney(estimated)}</Text>
           </View>
+          <Text style={styles.estimateNote}>Final price is confirmed by the provider.</Text>
 
           {submitError ? <Banner message={submitError} /> : null}
 
@@ -206,8 +224,13 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, gap: 16 },
-  location: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted, marginTop: -8 },
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32, gap: 16 },
+  modeRow: { alignItems: 'flex-end' },
+  intro: { gap: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  pageTitle: { flex: 1, fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
+  subtitle: { fontFamily: fonts.mono, fontSize: 11, lineHeight: 16, color: colors.muted },
+  location: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
 
   summary: {
     backgroundColor: colors.accentSoft,
@@ -230,6 +253,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   estimateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  estimateLabel: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18.2, color: colors.muted },
-  estimateValue: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 29, color: colors.text, ...tabularFigures },
+  estimateNote: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 17, color: colors.muted },
+  estimateValue: { fontFamily: fonts.monoBold, fontSize: 24, lineHeight: 29, color: colors.accent, ...tabularFigures },
 });

@@ -53,7 +53,7 @@ export function ProviderTabBar({ state, emitter, navigateToTab }: BottomTabBarPr
               <Icon
                 name={statefulIcon(tab.icon, focused)}
                 size={22}
-                color={focused ? palette.accent : colors.accentSoft}
+                color={focused ? palette.accent : colors.muted}
               />
               <Text style={[styles.label, focused && { color: palette.accent, fontFamily: fonts.bold }]}>
                 {tab.label}
@@ -78,7 +78,9 @@ const styles = StyleSheet.create({
     left: 15,
     right: 15,
     borderRadius: radius.md,
-    backgroundColor: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 6,
@@ -95,18 +97,18 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: radius.pill,
-    backgroundColor: colors.success,
+    backgroundColor: colors.accent,
   },
   modeLabel: {
     fontFamily: fonts.bold,
     fontSize: 11,
     letterSpacing: 0.6,
-    color: colors.accentSoft,
+    color: colors.accent,
   },
   tabs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   item: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  label: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.accentSoft },
-  labelActive: { fontFamily: fonts.bold, color: colors.bg },
+  label: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16.8, color: colors.muted },
+  labelActive: { fontFamily: fonts.bold, color: colors.text },
   indicator: { width: 20, height: 2, borderRadius: radius.pill, backgroundColor: 'transparent' },
   indicatorActive: { backgroundColor: colors.success },
 });

@@ -52,9 +52,9 @@ const QUALITY_LABELS: Record<Quality, string> = {
 };
 
 const SECTION_TITLES: Record<ProviderSection, string> = {
-  dashboard: 'Dashboard',
-  orders: 'Print jobs',
-  settings: 'Shop settings',
+  dashboard: 'Good afternoon, Nattapon.',
+  orders: 'Print requests',
+  settings: 'Your printers',
 };
 
 const SECTION_PALETTES: Record<ProviderSection, AppSection> = {
@@ -105,10 +105,10 @@ export function ProviderHeader({
   const router = useRouter();
   const palette = sectionPalettes[SECTION_PALETTES[section]];
   return (
-    <View style={[styles.header, { backgroundColor: palette.ink }]}>
+    <View style={[styles.header, { backgroundColor: colors.surface, borderColor: palette.border }]}>
       <View style={styles.headerIdentity}>
-        <Text style={[styles.headerBrand, { color: palette.soft }]}>FORGE PROVIDER</Text>
-        <Text style={[styles.headerTitle, { color: colors.secondary }]}>{title}</Text>
+        <Text style={[styles.headerBrand, { color: colors.accent }]}>PROVIDER MODE</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{title}</Text>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -120,7 +120,7 @@ export function ProviderHeader({
           pressed && styles.pressed,
         ]}
       >
-        <Icon name={icons.swap} size={16} color={colors.secondary} />
+        <Icon name={icons.swap} size={16} color={colors.bg} />
         <Text style={styles.modeButtonText}>Customer mode</Text>
       </Pressable>
     </View>
@@ -213,6 +213,18 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
   };
 
   const palette = sectionPalettes[SECTION_PALETTES[section]];
+  const activePrinters = provider?.printers.filter((printer) => printer.isActive).length ?? 0;
+  const activeOrders = orders.filter((order) =>
+    ['PENDING_ACCEPTANCE', 'CONFIRMED', 'IN_QUEUE', 'PRINTING'].includes(order.status),
+  ).length;
+  const earnings = orders.reduce(
+    (total, order) => total + Number(order.price_snapshot ?? 0),
+    0,
+  );
+  const heroSubtitle =
+    section === 'dashboard'
+      ? `${formatMoney(earnings)} earnings · ${activeOrders} active orders · ${activePrinters} printers`
+      : `${provider?.displayName ?? 'Your shop'} · ${provider?.type === 'LAB' ? 'Lab' : 'Individual maker'}`;
 
   if (loading) {
     return (
@@ -243,7 +255,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
             Add your pickup area, printers, rates, and pickup hours to start receiving print jobs.
           </Text>
           <Button
-            title="Set up provider profile"
+            title="Become a Provider"
             onPress={() => router.push('/provider-onboarding' as never)}
           />
         </View>
@@ -265,7 +277,7 @@ export default function ProviderWorkspace({ section }: { section: ProviderSectio
         <SectionHero
           section={SECTION_PALETTES[section]}
           title={SECTION_TITLES[section]}
-          subtitle={`${provider.displayName} · ${provider.type === 'LAB' ? 'Lab' : 'Individual maker'}`}
+          subtitle={heroSubtitle}
           action={
             <Badge
               label={statusLabel(provider)}
@@ -341,6 +353,7 @@ function DashboardSection({
   onAvailabilityChange: (isOpen: boolean) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const router = useRouter();
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -400,6 +413,11 @@ function DashboardSection({
           title="Change open days"
           variant="secondary"
           onPress={() => onQuickEdit('hours')}
+        />
+        <Button
+          title="View earnings"
+          variant="secondary"
+          onPress={() => router.push('/provider-earnings' as never)}
         />
         <Button title="Full provider setup" variant="ghost" onPress={onEditSetup} />
       </Card>
@@ -623,6 +641,7 @@ function SettingsSection({
   onAvailabilityChange: (isOpen: boolean) => void;
 }) {
   const activePrinters = provider.printers.filter((printer) => printer.isActive).length;
+  const router = useRouter();
 
   return (
     <View style={styles.sectionGap}>
@@ -658,6 +677,13 @@ function SettingsSection({
           detail={`${activePrinters} active · ${provider.printers.length} total`}
           accent={palette.accent}
           onPress={() => onQuickEdit('printers')}
+        />
+        <SettingRow
+          icon={icons.profile}
+          title="Provider profile"
+          detail="Public shop identity and mode switch"
+          accent={palette.accent}
+          onPress={() => router.push('/provider-profile' as never)}
         />
       </Card>
 
@@ -740,7 +766,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    backgroundColor: colors.text,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -767,7 +795,7 @@ const styles = StyleSheet.create({
   modeButtonText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16.8, color: colors.bg },
 
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  pageTitle: { fontFamily: fonts.semibold, fontSize: 24, lineHeight: 29, color: colors.text },
+  pageTitle: { fontFamily: fonts.displayBold, fontSize: 26, lineHeight: 32, color: colors.text },
   subtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18.2, color: colors.muted },
   intro: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
   emptyState: { flex: 1, justifyContent: 'center', gap: 14, paddingHorizontal: 8 },

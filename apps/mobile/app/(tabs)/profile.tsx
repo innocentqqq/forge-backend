@@ -5,7 +5,9 @@ import {
   AppHeader,
   Button,
   ErrorView,
+  ForgeAvatar,
   LoadingView,
+  ModeBadge,
   Screen,
   SectionHero,
   SettingRow,
@@ -99,6 +101,9 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.modeRow}>
+          <ModeBadge mode="customer" />
+        </View>
         <SectionHero
           section="profile"
           title="Your profile"
@@ -117,14 +122,12 @@ export default function ProfileScreen() {
         />
 
         <View style={styles.summary}>
-          <View style={styles.avatar}>
-            <Text style={styles.initials}>{initials}</Text>
-          </View>
+          <ForgeAvatar initials={initials} />
           <View style={styles.summaryCopy}>
             <Text style={styles.name}>{name}</Text>
             <Text style={styles.email}>{profile.email}</Text>
             <Text style={styles.plan}>
-              Maker account · {prints} prints completed
+              {prints} requests · 8 uploaded models · 3 saved printers
             </Text>
           </View>
         </View>
@@ -185,17 +188,17 @@ export default function ProfileScreen() {
         />
 
         <View style={styles.maker}>
-          <Text style={styles.makerTitle}>Maker mode</Text>
+          <Text style={styles.makerTitle}>Provider mode</Text>
           <Text style={styles.makerCopy}>
             {hasProviderProfile
               ? "Manage your shop, printers, and incoming print jobs."
-              : "List your printer and earn from print jobs nearby."}
+              : "Put your printer to work and support your maker community."}
           </Text>
           <Button
             title={
               hasProviderProfile
                 ? "Open provider dashboard"
-                : "Become a provider"
+                : "Switch to Provider Mode"
             }
             size="sm"
             labelSize="md"
@@ -251,6 +254,7 @@ function Section({ title, rows }: { title: string; rows: Row[] }) {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, gap: 12 },
+  modeRow: { alignItems: 'flex-end' },
   pressed: { opacity: 0.85 },
 
   editPill: {

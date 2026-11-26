@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { AppHeader, HeroTitle, Panel, Screen, Subtitle } from './ui';
+import { AppHeader, HeroTitle, ModeBadge, Panel, Screen, Subtitle } from './ui';
 import { Icon, icons, type IconName } from './icons';
 import { fonts } from '../lib/fonts';
 import { colors, radius } from '../lib/theme';
@@ -90,6 +90,9 @@ export function AuthScreen({
       <AppHeader />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.modeRow}>
+            <ModeBadge mode="customer" />
+          </View>
           <View style={styles.intro}>
             <HeroTitle>{title}</HeroTitle>
             <Subtitle>{description}</Subtitle>
@@ -125,6 +128,7 @@ export function AuthFooterLink({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 28, gap: 24, flexGrow: 1 },
+  modeRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   intro: { gap: 8 },
   terms: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.muted, textAlign: 'center' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
